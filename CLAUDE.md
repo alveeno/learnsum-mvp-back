@@ -1,0 +1,56 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+LearnSum is a Hong Kong-based two-sided tutoring marketplace. Tutors build Instagram-style profiles (bio + scrollable post feed) rather than CV-style listings. The primary tutor target is university students seeking side income. See `plan.md` for the full product and technical plan.
+
+## Planned Stack
+
+- **Framework:** Next.js 14 (App Router) — full-stack, SSR for SEO on tutor profile pages
+- **Backend + DB:** Supabase — auth, Postgres, Storage (media), Realtime (chat, v2)
+- **UI:** Tailwind CSS + shadcn/ui
+- **Email:** Resend (transactional)
+- **Deploy:** Vercel
+
+The project has not been scaffolded yet. When scaffolding, use `create-next-app` with the App Router and TypeScript.
+
+## Architecture Decisions
+
+### Three user roles
+`parent` | `student` | `tutor` — stored as an enum on the `profiles` table which extends `auth.users`. Each role has a corresponding detail table (`parent_profiles`, `student_profiles`, `tutor_profiles`).
+
+### Tutor profiles are public without auth
+`tutor_profiles.is_published = true` makes a profile publicly visible. RLS enforces this. An account is required only for: posting content, sending/receiving inquiries, and (v2) chat.
+
+### Contact flow
+WhatsApp redirect is the primary contact path (`wa.me/[number]?text=...`). The inquiry form is a fallback. No in-app messaging in v1.
+
+### Bilingual content strategy
+- System content (categories, notifications): parallel `name_en` / `name_zh` columns — acceptable since it is pre-seeded and finite
+- Tutor free-text fields (`achievements`, `qualifications`, `exam_results` on `tutor_subcategories`): `jsonb` with `{"en": "...", "zh": "..."}` — extensible to more languages without schema changes
+- User-generated posts: parallel `content` / `content_zh` columns
+
+### Denormalized counters require triggers
+`posts.likes_count` and `posts.comments_count` are denormalized for read performance. Postgres triggers on `post_likes` and `post_comments` must be created alongside the tables — see `plan.md §4.3a` for the required trigger stubs.
+
+### Conversations canonical ordering
+`conversations` enforces `CHECK (participant_a < participant_b)` to prevent duplicate rows. Always insert with the smaller UUID in `participant_a`.
+
+### `tutor_subcategories` v1 scope
+v1 onboarding collects only `subcategory_id`, `years_experience`, `hourly_rate_min`, `hourly_rate_max`. The `achievements`, `qualifications`, and `exam_results` jsonb fields are schema-ready but must not appear in the v1 onboarding form — they are v1.1.
+
+## What is explicitly out of v1
+
+Do not build these even if they seem natural extensions of adjacent work:
+
+- Personalised home feed matching (guest feed shows latest tutors only)
+- Student and parent account profiles
+- Tutor onboarding carousel (needs real profiles first)
+- Real-time chat (use WhatsApp + inquiry form)
+- Push notifications (use Resend email)
+- Post likes and comments UI (schema exists, hold the UI)
+- Saved filter preferences
+- Per-day availability scheduling
+- Advanced search beyond category + district
