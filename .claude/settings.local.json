@@ -9,7 +9,8 @@
       "Bash(rm \"C:/Users/User/Documents/my documents/github/learnsum-mvp-1/CLAUDE.md\" \"C:/Users/User/Documents/my documents/github/learnsum-mvp-1/plan.md\")",
       "Bash(cp /tmp/learnsum_backup/CLAUDE.md \"C:/Users/User/Documents/my documents/github/learnsum-mvp-1/CLAUDE.md\")",
       "Bash(cp /tmp/learnsum_backup/plan.md \"C:/Users/User/Documents/my documents/github/learnsum-mvp-1/plan.md\")",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest:*)"
     ]
   }
 }
