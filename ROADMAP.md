@@ -58,8 +58,8 @@ Update this section as you complete each step.
 - [x] Phase 1, Step 1 — App described to Rapid Prototyper, 3 core features confirmed
 - [x] Phase 1, Step 2 — Backend Architect produced schema and API structure, saved to PLAN.md
 - [x] Phase 2, Step 1 — Next.js + Supabase scaffold complete, migrations applied, app loads on localhost:3000
-- [ ] Phase 2, Step 2 — Build first API endpoint
-- [ ] Phase 2, Step 3 — Commit working endpoints
+- [x] Phase 2, Step 2 — Build first API endpoint
+- [x] Phase 2, Step 3 — Commit working endpoints
 - [ ] Phase 3, Step 1 — Scaffold React app screens
 - [ ] Phase 3, Step 2 — Build screens one at a time
 - [ ] Phase 3, Step 3 — Quick iterations with Rapid Prototyper

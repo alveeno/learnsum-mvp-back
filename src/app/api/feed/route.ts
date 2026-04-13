@@ -51,12 +51,15 @@ export async function GET(request: Request) {
     .range(offset, offset + PAGE_SIZE - 1)
 
   if (error) {
-    // PGRST103 = "Requested range not satisfiable" — offset exceeds total rows.
-    // Return an empty page rather than a 500.
+    // PGRST103 = "Requested range not satisfiable" — page is beyond last row.
+    // Fetch the real count separately so pagination metadata stays accurate.
     if (error.code === 'PGRST103') {
+      const { count: totalCount } = await supabase
+        .from('tutor_profiles')
+        .select('*', { count: 'exact', head: true })
       return NextResponse.json({
         feed: [],
-        pagination: { page, page_size: PAGE_SIZE, total: 0, has_more: false },
+        pagination: { page, page_size: PAGE_SIZE, total: totalCount ?? 0, has_more: false },
       })
     }
     console.error('[feed] Fetch error:', error)

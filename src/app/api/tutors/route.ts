@@ -256,3 +256,134 @@ export async function GET(request: Request) {
     },
   })
 }
+
+// Slug must be lowercase letters, numbers, and hyphens, 3–80 chars
+const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,78}[a-z0-9]$|^[a-z0-9]{1,2}$/
+
+// ---------------------------------------------------------------------------
+// POST /api/tutors
+// Creates a tutor profile for the authenticated user.
+// Requires the user's profiles.role to be 'tutor'.
+// tutor_profiles.id === profiles.id (1:1 extension table).
+// ---------------------------------------------------------------------------
+export async function POST(request: Request) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
+  // Verify the user signed up as a tutor
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (profileError || !profile) {
+    return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
+  }
+
+  if (profile.role !== 'tutor') {
+    return NextResponse.json(
+      { error: 'Only users with role "tutor" can create a tutor profile' },
+      { status: 403 }
+    )
+  }
+
+  // Idempotency — return 409 if the row already exists
+  const { data: existing } = await supabase
+    .from('tutor_profiles')
+    .select('id, slug')
+    .eq('id', user.id)
+    .single()
+
+  if (existing) {
+    return NextResponse.json(
+      { error: 'Tutor profile already exists', tutor_profile: existing },
+      { status: 409 }
+    )
+  }
+
+  const body = await request.json().catch(() => null)
+  if (!body) {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const { slug, bio, bio_zh, university, tutoring_format, tutoring_type, whatsapp_number } =
+    body as {
+      slug?: string
+      bio?: string
+      bio_zh?: string
+      university?: string
+      tutoring_format?: string
+      tutoring_type?: string
+      whatsapp_number?: string
+    }
+
+  if (!slug?.trim()) {
+    return NextResponse.json({ error: 'slug is required' }, { status: 400 })
+  }
+
+  const slugNormalized = slug.trim().toLowerCase()
+
+  if (!SLUG_REGEX.test(slugNormalized)) {
+    return NextResponse.json(
+      {
+        error:
+          'slug must be 3–80 characters, lowercase letters, numbers, and hyphens only, and must start and end with a letter or number',
+      },
+      { status: 400 }
+    )
+  }
+
+  if (tutoring_format && !VALID_FORMATS.has(tutoring_format)) {
+    return NextResponse.json(
+      { error: 'tutoring_format must be one of: online, in_person, both' },
+      { status: 400 }
+    )
+  }
+
+  if (tutoring_type && !VALID_TYPES.has(tutoring_type)) {
+    return NextResponse.json(
+      { error: 'tutoring_type must be one of: individual, group, both' },
+      { status: 400 }
+    )
+  }
+
+  // RLS "tutor_profiles: owner insert" (WITH CHECK auth.uid() = id) enforces ownership at DB layer
+  const { data: tutorProfile, error: insertError } = await supabase
+    .from('tutor_profiles')
+    .insert({
+      id: user.id,
+      slug: slugNormalized,
+      bio: bio?.trim() ?? null,
+      bio_zh: bio_zh?.trim() ?? null,
+      university: university?.trim() ?? null,
+      tutoring_format: tutoring_format ?? null,
+      tutoring_type: tutoring_type ?? null,
+      whatsapp_number: whatsapp_number?.trim() ?? null,
+      is_published: false,
+    })
+    .select()
+    .single()
+
+  if (insertError) {
+    // 23505 = unique_violation — slug already claimed by another tutor
+    if (insertError.code === '23505') {
+      return NextResponse.json(
+        { error: 'That slug is already taken — choose a different one' },
+        { status: 409 }
+      )
+    }
+    console.error('[tutors POST] Insert error:', insertError)
+    return NextResponse.json({ error: insertError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ tutor_profile: tutorProfile }, { status: 201 })
+}

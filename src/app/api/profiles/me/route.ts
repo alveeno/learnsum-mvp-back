@@ -46,6 +46,12 @@ export async function PATCH(request: Request) {
     )
   }
 
+  // Trim and validate display_name if provided
+  const trimmedDisplayName = display_name?.trim()
+  if (display_name !== undefined && !trimmedDisplayName) {
+    return NextResponse.json({ error: 'display_name cannot be empty' }, { status: 400 })
+  }
+
   // Validate enum values if provided
   if (district !== undefined && !VALID_DISTRICTS.includes(district as HkDistrict)) {
     return NextResponse.json(
@@ -66,7 +72,7 @@ export async function PATCH(request: Request) {
 
   // Build update payload — only include fields that were sent
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  if (display_name !== undefined) updates.display_name = display_name
+  if (display_name !== undefined) updates.display_name = trimmedDisplayName
   if (district !== undefined) updates.district = district
   if (preferred_language !== undefined) updates.preferred_language = preferred_language
 

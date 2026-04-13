@@ -76,11 +76,16 @@ export async function GET(
     .range(offset, offset + PAGE_SIZE - 1)
 
   if (postsError) {
-    // PGRST103 = range not satisfiable — page exceeds total posts
+    // PGRST103 = range not satisfiable — page is beyond last row.
+    // Fetch the real count separately so pagination metadata stays accurate.
     if (postsError.code === 'PGRST103') {
+      const { count: totalCount } = await supabase
+        .from('posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('tutor_id', tutor.id)
       return NextResponse.json({
         posts: [],
-        pagination: { page, page_size: PAGE_SIZE, total: 0, has_more: false },
+        pagination: { page, page_size: PAGE_SIZE, total: totalCount ?? 0, has_more: false },
       })
     }
     console.error('[tutors/posts GET] Posts fetch error:', postsError)

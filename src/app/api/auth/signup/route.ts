@@ -31,10 +31,6 @@ export async function POST(request: Request) {
     )
   }
 
-  // Env var check — surfaces misconfiguration immediately
-  console.log('[signup] SUPABASE_URL set:', !!process.env.NEXT_PUBLIC_SUPABASE_URL)
-  console.log('[signup] SUPABASE_ANON_KEY set:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-
   try {
     const supabase = await createClient()
 
@@ -55,8 +51,6 @@ export async function POST(request: Request) {
       })
       return NextResponse.json({ error: error.message }, { status: error.status ?? 400 })
     }
-
-    console.log('[signup] Success — user id:', data.user?.id, '| session:', !!data.session)
 
     return NextResponse.json(
       {
