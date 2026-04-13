@@ -328,14 +328,21 @@ CREATE TRIGGER trg_decrement_comments
 -- ---------------------------------------------------------------------------
 -- Auto-create profiles row when auth.users row is inserted
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION handle_new_user() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
 BEGIN
-  INSERT INTO profiles (id, role)
-  VALUES (NEW.id, (NEW.raw_user_meta_data->>'role')::user_role);
+  INSERT INTO public.profiles (id, role)
+  VALUES (
+    NEW.id,
+    (NEW.raw_user_meta_data ->> 'role')::user_role
+  );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();

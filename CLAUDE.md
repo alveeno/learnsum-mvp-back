@@ -14,6 +14,10 @@ LearnSum is a Hong Kong-based two-sided tutoring marketplace. Tutors build Insta
 - **Email:** Resend (transactional)
 - **Deploy:** Vercel
 
+Development environment: Windows 11, PowerShell. Use PowerShell-compatible commands for all testing instructions.
+
+Testing commands must always be single-line PowerShell commands with no backtick line continuations. Never use multi-line curl syntax.
+
 The project has not been scaffolded yet. When scaffolding, use `create-next-app` with the App Router and TypeScript.
 
 ## Architecture Decisions
