@@ -60,7 +60,7 @@ Update this section as you complete each step.
 - [x] Phase 2, Step 1 — Next.js + Supabase scaffold complete, migrations applied, app loads on localhost:3000
 - [x] Phase 2, Step 2 — Build first API endpoint
 - [x] Phase 2, Step 3 — Commit working endpoints
-- [ ] Phase 3, Step 1 — Scaffold React app screens
+- [x] Phase 3, Step 1 — Scaffold React app screens
 - [ ] Phase 3, Step 2 — Build screens one at a time
 - [ ] Phase 3, Step 3 — Quick iterations with Rapid Prototyper
 - [ ] Phase 4, Step 1 — Growth Hacker go-to-market plan
@@ -78,7 +78,7 @@ Update this section as you complete each step.
 
 ### What was done
 1. Forked and cloned msitarzewski/agency-agents from GitHub
-2. Created ~/.claude/agents/ folder on Windows 11
+2. Created ~/.claude/agents/ folder on MacOS
 3. Copied 5 MVP agent files into that folder:
    - engineering/engineering-frontend-developer.md
    - engineering/engineering-backend-architect.md
@@ -193,7 +193,7 @@ After each endpoint is confirmed working:
 **Duration:** Days 5–8
 **Agents:** 🎨 Frontend Developer, ⚡ Rapid Prototyper
 
-> **Note:** All frontend work for Phase 3 is done in the `learnsum-app` repository (React Native + Expo), not this repository. This repo provides the API that the app consumes.
+> **Note:** All frontend work for Phase 3 is done in the `learnsum-mvp-expo-app` repository (React Native + Expo), not this repository. This repo provides the API that the app consumes.
 
 ### Step 1 — Scaffold the core screens
 Prompt:
