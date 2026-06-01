@@ -13,7 +13,7 @@ A Hong Kong-based two-sided tutoring marketplace with a social media twist. Pare
 
 **Three user types:** Parents, Students, Tutors — each with different permissions, profile fields, and home feed experiences.
 
-**Tech stack:** Next.js 14 (App Router) + Supabase (Postgres) + TypeScript + Tailwind CSS + shadcn/ui
+**Tech stack:** Next.js 14 (App Router, API only) + Supabase (Postgres) + TypeScript — deployed to Vercel as an API server. Frontend is React Native + Expo in a separate repository (`learnsum-app`). There is no UI code in this repository.
 
 **Language support:** English and Traditional Chinese throughout.
 
@@ -192,6 +192,8 @@ After each endpoint is confirmed working:
 ## Phase 3 — Build the Frontend
 **Duration:** Days 5–8
 **Agents:** 🎨 Frontend Developer, ⚡ Rapid Prototyper
+
+> **Note:** All frontend work for Phase 3 is done in the `learnsum-app` repository (React Native + Expo), not this repository. This repo provides the API that the app consumes.
 
 ### Step 1 — Scaffold the core screens
 Prompt:

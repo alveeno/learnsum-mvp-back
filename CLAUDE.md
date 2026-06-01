@@ -8,17 +8,17 @@ LearnSum is a Hong Kong-based two-sided tutoring marketplace. Tutors build Insta
 
 ## Planned Stack
 
-- **Framework:** Next.js 14 (App Router) — full-stack, SSR for SEO on tutor profile pages
+- **Backend API:** Next.js 14 (App Router) — API routes only, no frontend pages or UI
+- **Frontend:** React Native + Expo (separate repo: `learnsum-app`) — not in this repository
 - **Backend + DB:** Supabase — auth, Postgres, Storage (media), Realtime (chat, v2)
-- **UI:** Tailwind CSS + shadcn/ui
 - **Email:** Resend (transactional)
-- **Deploy:** Vercel
+- **Deploy:** Vercel (API server only — no SSR pages, no static assets)
+
+> **Note:** This repository contains the backend API only. There is no frontend code here. All UI, screens, and components live in the `learnsum-app` repository.
 
 Development environment: Windows 11, PowerShell. Use PowerShell-compatible commands for all testing instructions.
 
 Testing commands must always be single-line PowerShell commands with no backtick line continuations. Never use multi-line curl syntax.
-
-The project has not been scaffolded yet. When scaffolding, use `create-next-app` with the App Router and TypeScript.
 
 ## Architecture Decisions
 
