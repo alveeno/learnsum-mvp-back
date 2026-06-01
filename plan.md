@@ -35,11 +35,11 @@ WhatsApp redirect is the primary path (standard in HK). Inquiry form as fallback
 | Layer | Choice | Reason |
 |---|---|---|
 | Backend API | Next.js 14 (App Router) | API routes only — no frontend pages or UI in this repo |
-| Frontend | React Native + Expo (separate repo: `learnsum-app`) | Mobile-first UI, separate from the API server |
+| Frontend | React Native + Expo (separate repo: `learnsum-mvp-expo-app`) | Mobile-first UI, separate from the API server |
 | Backend + DB | Supabase | Auth + Postgres + Storage + Realtime in one |
 | Real-time chat | Supabase Realtime | Built on WebSockets, no separate infra |
 | Email | Resend | Transactional notifications |
-| Push notifications | Expo Push / FCM | Mobile push via Expo in `learnsum-app` |
+| Push notifications | Expo Push / FCM | Mobile push via Expo in `learnsum-mvp-expo-app` |
 | Deploy | Vercel | API server only — zero-config, Next.js native |
 
 ---

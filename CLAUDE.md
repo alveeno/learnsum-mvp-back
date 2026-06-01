@@ -9,12 +9,12 @@ LearnSum is a Hong Kong-based two-sided tutoring marketplace. Tutors build Insta
 ## Planned Stack
 
 - **Backend API:** Next.js 14 (App Router) — API routes only, no frontend pages or UI
-- **Frontend:** React Native + Expo (separate repo: `learnsum-app`) — not in this repository
+- **Frontend:** React Native + Expo (separate repo: `learnsum-mvp-expo-app`) — not in this repository
 - **Backend + DB:** Supabase — auth, Postgres, Storage (media), Realtime (chat, v2)
 - **Email:** Resend (transactional)
 - **Deploy:** Vercel (API server only — no SSR pages, no static assets)
 
-> **Note:** This repository contains the backend API only. There is no frontend code here. All UI, screens, and components live in the `learnsum-app` repository.
+> **Note:** This repository contains the backend API only. There is no frontend code here. All UI, screens, and components live in the `learnsum-mvp-expo-app` repository.
 
 Development environment: Windows 11, PowerShell. Use PowerShell-compatible commands for all testing instructions.
 
