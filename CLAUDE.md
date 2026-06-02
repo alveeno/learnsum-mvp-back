@@ -16,9 +16,9 @@ LearnSum is a Hong Kong-based two-sided tutoring marketplace. Tutors build Insta
 
 > **Note:** This repository contains the backend API only. There is no frontend code here. All UI, screens, and components live in the `learnsum-mvp-expo-app` repository.
 
-Development environment: Windows 11, PowerShell. Use PowerShell-compatible commands for all testing instructions.
+Development environment: macOS, Terminal. Use bash-compatible commands for all testing instructions.
 
-Testing commands must always be single-line PowerShell commands with no backtick line continuations. Never use multi-line curl syntax.
+Testing commands must always be single-line bash commands. Never use multi-line curl syntax.
 
 ## Architecture Decisions
 
