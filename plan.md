@@ -422,8 +422,9 @@ POST  /api/upload                           [auth — returns Supabase Storage U
 - [x] Categories + subcategories (category, subcategory, years experience, hourly rate only)
 - [x] Schema for likes/comments (build UI later)
 
+- [x] **Personalised home feed matching** — `GET /api/feed` ranks published tutors for an authenticated student/parent with ≥1 category interest via the `match_tutors_for_seeker` RPC (soft weighted similarity: category 40, availability/district/language/format-type-budget 15 each, missing dimensions renormalized). Seeker availability captured in `seeker_availability` via `PUT /api/availability`. See `0003_seeker_availability_and_matching.sql`.
+
 ### Defer to V2
-- [ ] **Personalised home feed matching** — guest feed is indistinguishable from matched feed at early tutor volumes; build once usage data shows what attributes matter
 - [ ] **Student and parent accounts** — parents can browse and contact without an account; defer until chat ships, which is the first feature requiring login
 - [ ] **Tutor onboarding carousel** — requires real profiles to populate; build after 10–15 tutors are live
 - [ ] **Per-subject achievements, qualifications, exam results** — too heavy for tutor onboarding in v1; show category + subcategory + experience + rate only; add detail fields in v1.1
@@ -433,7 +434,7 @@ POST  /api/upload                           [auth — returns Supabase Storage U
 - [ ] **Post likes & comments** — schema is ready; hold UI until post volume justifies it
 - [ ] **Full bilingual content** — start English-only; ZH bio is optional for tutors
 - [ ] **Saved filter preferences** — low priority until there are enough tutors to warrant repeat filtering
-- [ ] **Per-day availability scheduling** — use a free-text availability notes field in v1
+- [ ] **Calendar / per-date availability scheduling** — v1 uses recurring `day_of_week × time_slot` buckets (`tutor_availability` / `seeker_availability`) for matching; specific-date scheduling is deferred
 - [ ] **Advanced search** (price, format, language, time slot) — add in v1.1 once category + district are validated
 - [ ] **University verification badge** — manual process; defer until tutor volume justifies it
 
@@ -442,7 +443,7 @@ POST  /api/upload                           [auth — returns Supabase Storage U
 ## 7. Data Flow Notes
 
 - **Guest home feed**: Returns recently published tutors, ordered by created_at. No personalisation until profile setup is done.
-- **Matched home feed**: `SELECT tutor_profiles JOIN tutor_subcategories JOIN profiles WHERE subcategory_id IN (user's interests) AND district = user's district AND preferred_language = user's language ORDER BY relevance score`.
+- **Matched home feed**: `match_tutors_for_seeker(p_page, p_page_size)` RPC scores every published tutor with a soft weighted similarity (no hard `WHERE` exclusions) across category-interest overlap, availability-slot overlap, district, preferred language, and format/type/budget, then `ORDER BY score DESC`. `/api/feed` hydrates full tutor cards for the ranked page. A dimension lacking data on either side is dropped and the remaining weights renormalize.
 - **Tutor profile page** (`/tutors/[slug]`): SSR with `revalidate = 60`. Fetches profile + first 10 posts server-side for SEO. Posts paginate client-side.
 - **WhatsApp fallback**: If tutor has `whatsapp_number` set, inquiry button opens `https://wa.me/[number]?text=Hi, I found you on LearnSum...` instead of submitting the form.
 - **Tutor onboarding**: Signup → `profiles` row auto-created via Supabase trigger → shown sample carousel → fills `tutor_profiles` + subjects → `is_published = true` makes discoverable.

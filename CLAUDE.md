@@ -45,16 +45,20 @@ WhatsApp redirect is the primary contact path (`wa.me/[number]?text=...`). The i
 ### `tutor_subcategories` v1 scope
 v1 onboarding collects only `subcategory_id`, `years_experience`, `hourly_rate_min`, `hourly_rate_max`. The `achievements`, `qualifications`, and `exam_results` jsonb fields are schema-ready but must not appear in the v1 onboarding form — they are v1.1.
 
+### Two-sided matching (seeker → tutors)
+`GET /api/feed` is personalized for an authenticated `student`/`parent` who has ≥1 `user_category_interests` row; everyone else (guests, tutors, seekers with no interests) gets the latest-tutors feed. Ranking runs in the Postgres RPC `match_tutors_for_seeker(p_page, p_page_size)` (`SECURITY DEFINER`, identifies the caller via `auth.uid()`). It scores every published tutor with a **soft** weighted similarity (no hard exclusions): category overlap **40**, availability overlap / district / preferred language / format-type-budget **15** each. A dimension with no data on either side is dropped and the remaining weights renormalize, so missing data never zeroes a tutor out (e.g. district is dropped for online-only tutors). Weights live as the five integer literals in `0003_seeker_availability_and_matching.sql` — tune them there. Availability for both sides is recurring `day_of_week × time_slot` buckets, not a calendar: tutors in `tutor_availability`, seekers in `seeker_availability`, both written via `PUT /api/availability` (role-routed).
+
 ## What is explicitly out of v1
 
 Do not build these even if they seem natural extensions of adjacent work:
 
-- Personalised home feed matching (guest feed shows latest tutors only)
 - Student and parent account profiles
 - Tutor onboarding carousel (needs real profiles first)
 - Real-time chat (use WhatsApp + inquiry form)
 - Push notifications (use Resend email)
 - Post likes and comments UI (schema exists, hold the UI)
 - Saved filter preferences
-- Per-day availability scheduling
+- Calendar-based / per-date availability scheduling (matching uses recurring `day_of_week × time_slot` buckets only — see "Two-sided matching")
 - Advanced search beyond category + district
+
+> **Note:** Personalised home feed matching was originally deferred but is now built — see the "Two-sided matching" architecture decision above.

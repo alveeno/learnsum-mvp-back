@@ -18,7 +18,23 @@
       "Bash(npx tsc:*)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(git stash *)",
+      "Bash(psql --version)",
+      "Bash(docker --version)",
+      "Read(//opt/homebrew/opt/**)",
+      "Bash(npm ls *)",
+      "Bash(npm config *)",
+      "Read(//Users/alveeno/.local/share/claude/versions/**)",
+      "Read(//Users/alveeno/.local/share/claude/**)",
+      "Bash(claude update *)",
+      "Bash(echo \"---EXIT: $?---\")",
+      "Bash(kill 22715)",
+      "Bash(kill -9 22715)",
+      "Bash(ls -la .last-update* .update*)",
+      "Bash(cp .last-update-result.json .last-update-result.json.bak)",
+      "Bash(rm -f .last-update-result.json)"
     ]
   }
 }
