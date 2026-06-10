@@ -1,7 +1,9 @@
 # MVP Launch Roadmap
 ## Hong Kong Tutoring Marketplace (Learnsum)
 
-This document is the single source of truth for building this MVP. All Claude Code sessions and new claude.ai chats should reference this file alongside PLAN.md and CLAUDE.md.
+This document is the build roadmap for the MVP. For the authoritative v1 schema, API, and scope, see `plan.md` and `CLAUDE.md` in this repo — where they differ from the older phase descriptions below, **they win**.
+
+> **v1 scope (current decisions):** Option A onboarding (email + password collected last), personalized weighted matching (subject > availability > price > language > district), full filter set + saved filters / Quick Match, tutor posts, WhatsApp / Instagram / WeChat contact, social login. **Out of v1:** in-app chat / messaging and the inquiry form (dormant code), push + in-app notifications (fully out), likes/comments UI. **Repos:** backend `learnsum-mvp-back`, frontend `learnsum-mvp-expo-app`.
 
 ---
 
@@ -13,7 +15,7 @@ A Hong Kong-based two-sided tutoring marketplace with a social media twist. Pare
 
 **Three user types:** Parents, Students, Tutors — each with different permissions, profile fields, and home feed experiences.
 
-**Tech stack:** Next.js 14 (App Router, API only) + Supabase (Postgres) + TypeScript — deployed to Vercel as an API server. Frontend is React Native + Expo in a separate repository (`learnsum-app`). There is no UI code in this repository.
+**Tech stack:** Next.js 14 (App Router, API only) + Supabase (Postgres) + TypeScript — deployed to Vercel as an API server. Frontend is React Native + Expo in a separate repository (`learnsum-mvp-expo-app`). There is no UI code in this repository.
 
 **Language support:** English and Traditional Chinese throughout.
 
@@ -169,17 +171,19 @@ What was completed:
 Prompt pattern to use for each endpoint:
 > "Activate Backend Architect mode. Read CLAUDE.md and PLAN.md. Build the [name] endpoint. Show me how to test it when done."
 
-**Recommended build order for MVP:**
-1. User authentication (sign up, sign in, sign out) — covers all three user types
-2. User type selection and basic profile creation
+**Recommended build order for v1:**
+1. Authentication — email + password sign up/in/out (email verification OFF), all three roles; plus social login (Google / Apple / Microsoft)
+2. One-shot onboarding write (Option A) — create account + persist the role's onboarding data (student / parent + children / tutor). See `plan.md §9`
 3. Tutor profile read endpoint (public, no auth required)
 4. Category and subcategory listing endpoint
-5. Home feed matching endpoint (filtered by user type, district, language, categories)
-6. Advanced search and filter endpoint
-7. Save filter preferences endpoint (authenticated users only)
+5. Availability (precise time ranges) — GET/PUT, role-routed
+6. Personalized matching feed — subject > availability > price > language > district; per child for parents
+7. Full browse filters + saved filter preferences (`GET`/`PUT /api/filters`)
 8. Tutor post creation and retrieval endpoints
-9. Direct messaging endpoints
-10. Notification endpoints
+9. Profile editing + account deletion (all roles); tutor publish / self-unpublish
+10. Contact columns (WhatsApp / Instagram / WeChat) on tutor profiles
+
+> **Out of v1 (do NOT build):** direct messaging / chat endpoints and notification / push endpoints. The chat + inquiry endpoints already in the repo stay **dormant**.
 
 ### Step 3 — Commit after each working endpoint
 After each endpoint is confirmed working:
@@ -200,15 +204,17 @@ Prompt:
 > "Activate Frontend Developer mode. Read CLAUDE.md, PLAN.md, and ROADMAP.md. Create the core screen structure for the app. Start with: welcome screen with user type selection (parent, student, tutor), home feed page showing matched profiles, and a basic tutor profile page. Connect these to the backend endpoints already built. Do not build any other screens yet."
 
 ### Step 2 — Build screens one at a time
-Recommended screen build order:
-1. Welcome screen — user type selection (parent / student / tutor)
-2. Home feed — tutor cards for parents and students, student listings for tutors
-3. Tutor profile page — Instagram-style layout (bio top, post feed below)
-4. Advanced search and filter panel
-5. Profile setup section — "Set up your profile to get better matches"
-6. Tutor onboarding — sample profile carousel, category selection, per-subcategory fields
-7. Direct messaging screen
-8. Notification centre
+Recommended screen build order (the onboarding flows are already built — see the frontend `CLAUDE.md`):
+1. Welcome screen — user-type selection (built)
+2. Onboarding flows: student / parent (per child) / tutor — built; wire the final credential step (Option A) to create the account + persist the collected data
+3. Home feed — personalized matched tutor cards (guest = latest published tutors)
+4. Tutor profile page — Instagram-style (bio top, post feed below) + WhatsApp / Instagram / WeChat contact buttons
+5. Full search + filter panel; saved filters + Quick Match card
+6. Tutor "complete your profile" screen (bio, photo, contacts, remaining details) + explicit publish / self-unpublish
+7. Post creation + post feed viewer
+8. Profile editing (all roles) + account deletion
+
+> **Out of v1 (do NOT build):** direct messaging screen, notification centre, likes/comments UI.
 
 **Rule for each screen:** Test it in the browser before moving to the next one. If something looks broken, describe what you see and paste any error messages into Claude Code.
 
@@ -286,12 +292,17 @@ In GitHub Desktop:
 - Bilingual content (English and Traditional Chinese) must be accounted for in all user-facing text fields
 
 ### What is deferred to version two
+- In-app chat / messaging (schema + `/api/conversations*` endpoints exist in the repo but are dormant)
+- Inquiry form (schema + `/api/tutors/[slug]/inquiries` exist but dormant)
 - Likes and comments on tutor posts (schema exists, interactions not built)
+- Calendar / per-date availability scheduling (v1 uses recurring weekday time ranges)
 - In-app payments and booking system
 - Review and rating system
-- Advanced recommendation algorithm
+- Advanced recommendation algorithm (v1 already has a basic weighted matching feed)
 - Verified tutor badges
 - Group tutoring session management
+
+> **Fully out (not even planned work for now):** push notifications and in-app notifications.
 
 ---
 

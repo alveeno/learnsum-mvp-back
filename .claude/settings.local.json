@@ -34,7 +34,8 @@
       "Bash(kill -9 22715)",
       "Bash(ls -la .last-update* .update*)",
       "Bash(cp .last-update-result.json .last-update-result.json.bak)",
-      "Bash(rm -f .last-update-result.json)"
+      "Bash(rm -f .last-update-result.json)",
+      "Bash(grep -rnE \"learnsum-app|learnsum-mvp-1|learnsum-mvp-expo\\([^-]|$\\)\" learnsum-mvp-1/plan.md learnsum-mvp-1/CLAUDE.md learnsum-mvp-1/ROADMAP.md learnsum-mvp-expo/CLAUDE.md)"
     ]
   }
 }

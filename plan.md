@@ -1,7 +1,14 @@
-
 ---
 
 # LearnSum MVP — Product & Technical Plan
+
+> **Repo naming:** this backend repo is `learnsum-mvp-back`; the React Native + Expo
+> frontend is `learnsum-mvp-expo-app`. (Folders are being renamed to these; treat
+> them as canonical in all docs.)
+>
+> **This document is the source of truth for the backend schema + API.** It reflects
+> the v1 product decisions agreed for the current build. Where a decision implies
+> schema/API work that is not yet written, it is called out inline with **TODO**.
 
 ## 1. Product Overview
 
@@ -10,23 +17,44 @@ Hong Kong-based two-sided tutoring marketplace with a social media layer.
 **Three user types:** Parent · Student · Tutor
 
 **Core philosophy:**
-- Zero friction onboarding — user type selection → home feed immediately, no setup gates
-- Browse is public — account required only for saving preferences, profile info, and chat
-- Tutor profiles work like Instagram — bio block + scrollable post feed
-- Two-way discovery — parents/students find tutors AND tutors find students
+- **Browse is public, account is created at the end.** A guest can browse the whole
+  app. Onboarding collects everything *first*; **email + password are collected on the
+  final step** ("Option A" — see §9). Submitting credentials creates the account and
+  writes all collected onboarding data in one shot.
+- Tutor profiles work like Instagram — bio block + scrollable post feed.
+- Two-way discovery — parents/students find tutors via a personalized, weighted feed.
+- **Contact is WhatsApp / Instagram / WeChat** (all optional, any combination). No
+  in-app inquiry form, no in-app chat in v1.
 
 ---
 
 ## 2. Three Core Features (v1)
 
 **1. Tutor Social Profile** — supply-side value proposition
-Bio block: photo, display name, university, age, gender, categories, pricing, personal description. Below: scrollable post feed (text, photos, video) marketing teaching style, student results, personality. Everything else depends on this existing first.
+Bio block: photo, display name, university, categories, pricing, personal description,
+plus per-subject achievements / qualifications / experience. Below: scrollable post feed
+(text, photos, video). A tutor's profile is **not auto-published**: after onboarding
+`is_published` stays `false` and the tutor home screen shows a persistent "complete your
+profile" prompt leading to a dedicated screen (bio, photo, WhatsApp, Instagram, WeChat,
+remaining details) where they explicitly publish. Tutors can later unpublish themselves.
 
-**2. Public Browse + Category / District Filter** — demand-side discovery + SEO
-Browse grid filtered by category and district. SSR tutor profile pages at `/tutors/[slug]` indexed by Google from day one. Price/format/language filters added in v1.1 once there is signal on what parents actually use.
+**2. Public Browse + Full Filters + Personalized Feed** — demand-side discovery + SEO
+Public browse of published tutors. The home feed is **personalized by a weighted matching
+algorithm** for seekers (see §6). Filters in v1 are the **full saved-filter set**:
+preferred languages, districts, tutoring format, tutoring type, subcategory, price
+min/max, and availability. Saved filter preferences are auth-gated and surfaced via a
+**Quick Match** card on the home screen.
 
-**3. WhatsApp Redirect / Inquiry Form** — closes the marketplace loop
-WhatsApp redirect is the primary path (standard in HK). Inquiry form as fallback for tutors who prefer not to expose their number. No backend booking logic required.
+**3. WhatsApp / Instagram / WeChat Contact** — closes the marketplace loop
+Each tutor may set any combination of three optional contact methods. On the tutor
+profile page, **all configured contact buttons show simultaneously**:
+- **WhatsApp** → `https://wa.me/[number]?text=...` pre-filled with
+  `Hi, I found you on LearnSum and I'm interested in tutoring for [subject].`
+- **Instagram** → opens the tutor's Instagram profile.
+- **WeChat** → opens WeChat with the tutor's WeChat ID.
+
+No inquiry form and no backend booking logic in v1. (The `inquiries` table and its
+endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 ---
 
@@ -36,15 +64,23 @@ WhatsApp redirect is the primary path (standard in HK). Inquiry form as fallback
 |---|---|---|
 | Backend API | Next.js 14 (App Router) | API routes only — no frontend pages or UI in this repo |
 | Frontend | React Native + Expo (separate repo: `learnsum-mvp-expo-app`) | Mobile-first UI, separate from the API server |
-| Backend + DB | Supabase | Auth + Postgres + Storage + Realtime in one |
-| Real-time chat | Supabase Realtime | Built on WebSockets, no separate infra |
-| Email | Resend | Transactional notifications |
-| Push notifications | Expo Push / FCM | Mobile push via Expo in `learnsum-mvp-expo-app` |
+| Backend + DB | Supabase | Auth + Postgres + Storage |
+| Email | Resend (transactional) | **Not wired in v1** — email verification is OFF and notifications are out of scope; reserved for v1.1+ |
 | Deploy | Vercel | API server only — zero-config, Next.js native |
+
+> **Out of the stack for v1:** Supabase Realtime / chat (v2), Expo Push / FCM (out — no
+> push notifications in v1).
 
 ---
 
 ## 4. Database Schema
+
+> Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
+> Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS — note the stale
+> duplicate `0002_rls_policies.sql` should be removed), `0003_seeker_availability_and_matching.sql`.
+> **The v1 decisions below require new migrations** (`0004+`): contact columns, the precise
+> time-range availability redesign, the 6-value education enum, the expanded language set,
+> per-child tables, and the reworked matching RPC. These are flagged **TODO (migration)** inline.
 
 ### 4.1 Auth & Core Profiles
 
@@ -55,33 +91,54 @@ role                enum        'parent' | 'student' | 'tutor'
 full_name           text
 display_name        text
 avatar_url          text
-preferred_language  enum        'english' | 'cantonese' | 'mandarin'
-district            enum        (see §4.7 — 18 HK districts)
 age                 int
 gender              enum        'male' | 'female' | 'other' | 'prefer_not_to_say'
-school_name         text        (students and parents)
 onboarding_done     bool        default false
 created_at          timestamptz
 updated_at          timestamptz
 ```
+> **Changed for v1:** per-person *preferred languages* and *preferred districts* are now
+> multi-valued and live on the seeker detail tables (below), not as single enums on
+> `profiles`. **TODO (migration):** drop/relax `profiles.preferred_language` and
+> `profiles.district` single-enum columns, or keep one as an optional "primary/home" value.
+> `school_name` is no longer collected in onboarding.
 
-**`student_profiles`** — one-to-one with profiles where role = 'student'
+**`student_profiles`** — one-to-one with profiles where role = 'student' (a *seeker*)
 ```
-id                      uuid   PK  FK → profiles
-school_level            enum   'primary' | 'secondary' | 'university' | 'adult'
-tutoring_format_pref    enum   'online' | 'in_person' | 'both'
-tutoring_type_pref      enum   'individual' | 'group' | 'both'
-budget_max_per_hour     int    HKD
+id                      uuid    PK  FK → profiles
+school_level            enum    'kindergarten' | 'primary' | 'middle' | 'high' | 'university' | 'adult'
+tutoring_format_pref    enum    'online' | 'in_person' | 'both'
+tutoring_type_pref      enum    'individual' | 'group' | 'both'
+budget_max_per_hour     int     HKD
+preferred_languages     text[]  expanded language set (see §4.2a)
+preferred_districts     text[]  array of district enums (see §4.10)
 ```
+> **TODO (migration):** `school_level` enum expands from 4 → **6** values
+> (add `kindergarten`, `middle`, `high`; `secondary` is superseded by `middle`+`high`).
+> Add `preferred_languages` / `preferred_districts`.
 
 **`parent_profiles`** — one-to-one with profiles where role = 'parent'
 ```
-id                      uuid   PK  FK → profiles
-searching_for_self      bool   default false
-tutoring_format_pref    enum   'online' | 'in_person' | 'both'
-tutoring_type_pref      enum   'individual' | 'group' | 'both'
-budget_max_per_hour     int    HKD
+id                      uuid    PK  FK → profiles
+searching_for_self      bool    default false
 ```
+> A parent does **not** hold tutoring preferences directly — each child does (below).
+
+**`child_profiles`** — NEW. One row per child of a parent account (a *seeker*)
+```
+id                      uuid    PK
+parent_id               uuid    FK → profiles (role = 'parent')
+name                    text
+school_level            enum    same 6-value enum as student_profiles
+tutoring_format_pref    enum    'online' | 'in_person' | 'both'
+tutoring_type_pref      enum    'individual' | 'group' | 'both'
+budget_max_per_hour     int     HKD
+preferred_languages     text[]
+preferred_districts     text[]
+created_at              timestamptz
+```
+> **TODO (migration):** create `child_profiles`. A parent can have 1–6 children, each
+> with its own interests + availability (below). Matching runs **per child** (§6).
 
 **`tutor_profiles`** — one-to-one with profiles where role = 'tutor'
 ```
@@ -92,11 +149,17 @@ bio_zh              text   Traditional Chinese bio
 university          text
 tutoring_format     enum   'online' | 'in_person' | 'both'
 tutoring_type       enum   'individual' | 'group' | 'both'
-whatsapp_number     text
-is_published        bool   default false
+whatsapp_number     text   optional contact
+instagram_handle    text   optional contact   — NEW
+wechat_id           text   optional contact   — NEW
+is_published        bool   default false       (stays false until tutor explicitly publishes)
 created_at          timestamptz
 updated_at          timestamptz
 ```
+> **TODO (migration 0004):** add `instagram_handle`, `wechat_id`. Tutor teaching
+> languages + proficiency are stored separately — **TODO (migration):** add a
+> `tutor_languages` table `(tutor_id, language, proficiency 1..4)` (the onboarding
+> "proficiency" UI has no home today).
 
 ---
 
@@ -119,13 +182,18 @@ name_zh      text
 slug         text  UNIQUE
 ```
 
-**`user_category_interests`** — categories parents/students care about (drives feed matching)
+> **Frontend mismatch (TODO):** onboarding currently uses **hardcoded string slugs**
+> (`"sports"`, `"basketball"`, plus user-typed `custom-…`) and never calls
+> `/api/categories`. For matching to work, onboarding selections must be mapped to real
+> `subcategories.id` UUIDs (either seed the DB to match the frontend slugs, or have the
+> app fetch `/api/categories`). User-typed custom subjects need a capture strategy.
+
+**Interest junction tables** — drive feed matching
 ```
-id              uuid  PK
-profile_id      uuid  FK → profiles
-subcategory_id  uuid  FK → subcategories
-UNIQUE(profile_id, subcategory_id)
+user_category_interests   (id, profile_id  FK → profiles,       subcategory_id, UNIQUE(profile_id, subcategory_id))   — students
+child_category_interests  (id, child_id    FK → child_profiles, subcategory_id, UNIQUE(child_id, subcategory_id))     — NEW, per child
 ```
+> **TODO (migration):** add `child_category_interests`.
 
 **`tutor_subcategories`** — what a tutor teaches, with per-subject detail
 ```
@@ -135,24 +203,59 @@ subcategory_id      uuid   FK → subcategories
 years_experience    int
 hourly_rate_min     int    HKD
 hourly_rate_max     int    HKD
-achievements        jsonb  {"en": "...", "zh": "..."}  — v1.1, do not surface in onboarding form
-qualifications      jsonb  {"en": "...", "zh": "..."}  — v1.1, do not surface in onboarding form
-exam_results        jsonb  {"en": "HKDSE Maths 5**", "zh": "..."}  — v1.1, do not surface in onboarding form
+achievements        jsonb  {"en": "...", "zh": "..."}   — v1 (collected in onboarding)
+qualifications      jsonb  {"en": "...", "zh": "..."}   — v1 (collected in onboarding)
+exam_results        jsonb  {"en": "HKDSE Maths 5**", "zh": "..."} — v1
 ```
-> v1 onboarding collects only: subcategory, years_experience, hourly_rate_min/max. Detail fields are schema-ready but hidden until v1.1.
+> **Changed for v1:** `achievements` / `qualifications` / `exam_results` are now **v1**
+> (the tutor "Strengths & Details" screen already collects them). The onboarding also
+> collects a free-text **"relevant experience"** list and a single **preferred pay**
+> figure per subject. **TODO (migration / mapping):** add a home for "experience"
+> (e.g. an `experience` jsonb/array on `tutor_subcategories`); decide how the single
+> pay figure maps to `hourly_rate_min`/`hourly_rate_max` (e.g. set both, or treat as min).
 
-**`tutor_availability`** — when tutor is available to teach
-```
-id             uuid  PK
-tutor_id       uuid  FK → tutor_profiles
-day_of_week    enum  'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
-time_slot      enum  'morning' | 'afternoon' | 'evening'
-UNIQUE(tutor_id, day_of_week, time_slot)
-```
+#### 4.2a Expanded language set
+The seeker language selection and tutor teaching languages now include the extended list
+from onboarding, not just three. Languages: `english`, `cantonese`, `mandarin`,
+`japanese`, `korean`, `french`, `spanish`, `german`, `italian`, `portuguese`, `thai`,
+`hindi`, `arabic` (extend as needed).
+> **TODO (migration):** the `preferred_language` enum (3 values) is replaced by this
+> expanded set used in `text[]` columns / `tutor_languages`. Decide enum-vs-text.
 
 ---
 
-### 4.3 Social Posts (Tutor Feed)
+### 4.3 Availability (precise time ranges) — REDESIGNED
+
+v1 stores **precise start/end time ranges per weekday**, not coarse morning/afternoon/
+evening buckets. The `time_slot` enum (`morning|afternoon|evening`) is **removed**.
+
+**`tutor_availability`**
+```
+id           uuid        PK
+tutor_id     uuid        FK → tutor_profiles
+day_of_week  enum        'mon'..'sun'
+start_min    int         minutes from midnight (0–1440)
+end_min      int         minutes from midnight (0–1440), > start_min
+```
+
+**`seeker_availability`** — students and children
+```
+id           uuid        PK
+owner_id     uuid        a student's profile_id OR a child_profiles.id
+owner_type   enum        'student' | 'child'
+day_of_week  enum        'mon'..'sun'
+start_min    int
+end_min      int
+```
+> **TODO (migration):** drop the `time_slot` enum; replace both availability tables with
+> the `start_min`/`end_min` shape above; add `owner_type` so a child's availability is
+> distinguishable from a student's. Multiple ranges per day are allowed.
+> Both sides are still written via `PUT /api/availability` (role-routed; for parents,
+> scoped to a specific child — **TODO**: accept a `child_id`).
+
+---
+
+### 4.4 Social Posts (Tutor Feed) — v1
 
 **`posts`**
 ```
@@ -161,8 +264,8 @@ tutor_id        uuid  FK → tutor_profiles
 content         text
 content_zh      text
 post_type       enum  'update' | 'showcase' | 'result'
-likes_count     int   default 0  (denormalised — maintained by trigger, see §4.3a)
-comments_count  int   default 0  (denormalised — maintained by trigger, see §4.3a)
+likes_count     int   default 0  (denormalised — maintained by trigger, see §4.4a)
+comments_count  int   default 0  (denormalised — maintained by trigger, see §4.4a)
 created_at      timestamptz
 updated_at      timestamptz
 ```
@@ -176,275 +279,293 @@ media_type  enum  'image' | 'video'
 sort_order  int
 ```
 
-**`post_likes`** — schema only; interactions not built in MVP
+**`post_likes`** / **`post_comments`** — schema only; **likes/comments UI is out of v1**
+(tables + triggers exist so the data model is ready; do not build the interaction UI).
 ```
-id          uuid  PK
-post_id     uuid  FK → posts  ON DELETE CASCADE
-profile_id  uuid  FK → profiles
-created_at  timestamptz
-UNIQUE(post_id, profile_id)
+post_likes     (id, post_id, profile_id, created_at, UNIQUE(post_id, profile_id))
+post_comments  (id, post_id, profile_id, parent_comment_id, content, deleted_at, created_at)
 ```
 
-**`post_comments`** — schema only; not built in MVP
-```
-id                 uuid  PK
-post_id            uuid  FK → posts  ON DELETE CASCADE
-profile_id         uuid  FK → profiles
-parent_comment_id  uuid  FK → post_comments  NULL  (reply threading)
-content            text
-deleted_at         timestamptz  NULL  (soft delete — preserves reply threads)
-created_at         timestamptz
-```
+> **v1 scope:** tutors can **create posts** and the tutor profile shows a **scrollable
+> post feed** (bio at top, posts below, Instagram-style). Post creation + feed viewer are
+> built; likes/comments remain schema-only.
 
-#### §4.3a — Required counter triggers
-These must be created alongside the tables. Without them `likes_count` and `comments_count` are permanently 0.
+#### §4.4a — Required counter triggers
+Created alongside the tables (already in `0001`). Without them the counts stay 0.
 ```sql
--- after INSERT on post_likes  → UPDATE posts SET likes_count    = likes_count    + 1 WHERE id = NEW.post_id
--- after DELETE on post_likes  → UPDATE posts SET likes_count    = likes_count    - 1 WHERE id = OLD.post_id
--- after INSERT on post_comments (where deleted_at IS NULL) → UPDATE posts SET comments_count = comments_count + 1
--- after UPDATE on post_comments (deleted_at set)           → UPDATE posts SET comments_count = comments_count - 1
+-- after INSERT on post_likes  → posts.likes_count    + 1
+-- after DELETE on post_likes  → posts.likes_count    - 1
+-- after INSERT on post_comments (deleted_at IS NULL) → posts.comments_count + 1
+-- after UPDATE on post_comments (deleted_at set)     → posts.comments_count - 1
 ```
 
 ---
 
-### 4.4 Inquiries (MVP contact flow)
+### 4.5 Contact methods (replaces the inquiry flow)
 
+Three optional columns on `tutor_profiles` (§4.1): `whatsapp_number`, `instagram_handle`,
+`wechat_id`. All optional; any combination. The profile page renders every configured
+button. There is **no inquiry form** in v1.
+
+### 4.6 Inquiries — DORMANT (kept in schema, not wired)
 ```
-id                 uuid  PK
-tutor_id           uuid  FK → tutor_profiles
-sender_profile_id  uuid  FK → profiles  (nullable — unauthenticated senders)
-sender_name        text
-sender_email       text
-sender_phone       text
-message            text
-preferred_schedule text  (free-form: "Weekday evenings, Sat mornings")
-status             enum  'new' | 'read' | 'replied'  default 'new'
-created_at         timestamptz
+inquiries (id, tutor_id, sender_profile_id, sender_name, sender_email, sender_phone,
+           message, preferred_schedule, status 'new'|'read'|'replied', created_at)
 ```
+> The table and `POST /api/tutors/[slug]/inquiries` still exist but are **out of v1** —
+> do not build UI against them. Marked dormant for possible future use.
+
+### 4.7 Chat & Messaging — DORMANT / v2 (kept in schema, not wired)
+```
+conversations (id, participant_a, participant_b, last_message_at, created_at,
+               UNIQUE(participant_a, participant_b), CHECK (participant_a < participant_b))
+messages      (id, conversation_id, sender_id, content, is_read, created_at)
+```
+> Canonical ordering: always insert the smaller UUID in `participant_a`. The
+> `/api/conversations*` endpoints exist but are **dormant** — chat is a planned v2 feature.
+> No real-time wiring in v1.
+
+### 4.8 Notifications & Push — OUT OF v1 (dormant schema)
+```
+push_tokens   (id, profile_id, token, platform, created_at, UNIQUE(profile_id, token))
+notifications (id, recipient_id, type, title_en/zh, body_en/zh, data, is_read, push_sent, created_at)
+```
+> **Fully out of v1:** no push tokens registered, no notifications written, no notification
+> endpoints. Tables remain but are unused.
 
 ---
 
-### 4.5 Chat & Messaging
-
-**`conversations`**
+### 4.9 Saved Filter Preferences — v1 (auth-gated)
 ```
-id               uuid  PK
-participant_a    uuid  FK → profiles
-participant_b    uuid  FK → profiles
-last_message_at  timestamptz
-created_at       timestamptz
-UNIQUE(participant_a, participant_b)
-CHECK (participant_a < participant_b)   -- canonical ordering prevents duplicate conversations
+saved_filter_preferences
+  id                uuid        PK
+  profile_id        uuid        FK → profiles  UNIQUE
+  preferred_langs   text[]      expanded language set
+  districts         text[]      district enums
+  tutoring_format   enum        'online' | 'in_person' | 'both'
+  tutoring_type     enum        'individual' | 'group' | 'both'
+  subcategory_ids   uuid[]      (no FK enforcement — categories are pre-seeded and stable)
+  price_min         int         HKD
+  price_max         int         HKD
+  availability      jsonb       precise ranges, e.g. {"mon":[{"start":540,"end":720}]}
+  updated_at        timestamptz
 ```
-> Always insert with the smaller UUID in `participant_a`. The CHECK prevents `(Alice, Bob)` and `(Bob, Alice)` from coexisting as separate rows.
+> Surfaced via the **Quick Match** card on the home screen. `GET`/`PUT /api/filters` are
+> built. **TODO:** align the `availability` jsonb shape with the precise-range redesign (§4.3).
 
-**`messages`**
-```
-id               uuid  PK
-conversation_id  uuid  FK → conversations
-sender_id        uuid  FK → profiles
-content          text
-is_read          bool  default false
-created_at       timestamptz
-```
-
-**`push_tokens`** — device tokens for push notifications
-```
-id          uuid  PK
-profile_id  uuid  FK → profiles
-token       text
-platform    enum  'ios' | 'android' | 'web'
-created_at  timestamptz
-UNIQUE(profile_id, token)
-```
-
----
-
-### 4.6 Notifications
-
-**`notifications`**
-```
-id            uuid  PK
-recipient_id  uuid  FK → profiles
-type          enum  'new_message' | 'new_match' | 'post_like' | 'post_comment'
-title_en      text
-title_zh      text
-body_en       text
-body_zh       text
-data          jsonb  (flexible payload: {message_id, post_id, tutor_slug, ...})
-is_read       bool   default false
-push_sent     bool   default false
-created_at    timestamptz
-```
-
----
-
-### 4.7 Saved Filter Preferences
-
-```
-id                profile_id  uuid  FK → profiles  UNIQUE
-preferred_langs   text[]      (array of language enums)
-districts         text[]      (array of district enums)
-tutoring_format   enum        'online' | 'in_person' | 'both'
-tutoring_type     enum        'individual' | 'group' | 'both'
-subcategory_ids   uuid[]      (no FK enforcement — acceptable since categories are pre-seeded and stable)
-price_min         int         HKD (tutors setting floor)
-price_max         int         HKD (parents/students setting ceiling)
-availability      jsonb       ({mon: ["morning","evening"], sat: ["afternoon"]})
-updated_at        timestamptz
-```
-
----
-
-### 4.8 HK Districts Enum (18 districts)
+### 4.10 HK Districts Enum (18 districts)
 ```
 CentralWestern | WanChai | Eastern | Southern
 YauTsimMong | ShamshuiPo | KowloonCity | WongTaiSin | KwunTong
 KwaiTsing | TsuenWan | TuenMun | YuenLong | North | TaiPo | SaiKung | ShaTin | Islands
 ```
+> **Frontend mismatch (TODO):** onboarding shows district *labels* (`"Central & Western"`,
+> `"Wan Chai"`) and groups them by region (HK Island / Kowloon / New Territories). These
+> must be mapped to the enum values above before storage.
 
 ---
 
-### 4.9 Key RLS Policies
+### 4.11 Key RLS Policies
 | Table | Public SELECT | Write |
 |---|---|---|
 | `tutor_profiles` | `is_published = true` only | Owner only |
 | `posts` + `post_media` | All rows | Owner only |
-| `student_profiles`, `parent_profiles` | All rows (tutors browse these) | Owner only |
-| `inquiries` | Tutor sees their own | Anyone can INSERT; tutor can UPDATE status |
-| `conversations`, `messages` | Participants only | Participants only |
-| `notifications` | Recipient only | System / triggers only |
+| `student_profiles`, `child_profiles` | All rows (tutors may browse) | Owner only |
+| `tutor_subcategories`, `*_availability`, `*_category_interests` | per matching needs | Owner only |
+| `saved_filter_preferences` | Owner only | Owner only |
+| `inquiries` *(dormant)* | Tutor sees their own | Anyone INSERT; tutor UPDATE status |
+| `conversations`, `messages` *(dormant)* | Participants only | Participants only |
+| `notifications` *(out)* | Recipient only | System / triggers only |
+
+> The matching RPC is `SECURITY DEFINER`, so it reads seeker/tutor preference rows
+> regardless of RLS, identifying the caller via `auth.uid()`.
 
 ---
 
 ## 5. API Routes
 
+Legend: **[v1]** built/active · **[dormant]** exists but out of v1 · **[todo]** to build.
+
 ### Auth
 ```
-POST  /api/auth/signup
-POST  /api/auth/login
-POST  /api/auth/logout
-GET   /api/auth/me
+POST  /api/auth/signup     [v1]  email + password + role; creates auth user (trigger makes profiles row)
+POST  /api/auth/login      [v1]
+POST  /api/auth/logout     [v1]
+GET   /api/auth/me         [v1]  returns { user, profile }
 ```
+> **Email verification is OFF** in Supabase Auth, so `signup` returns a live session and
+> the app can immediately write onboarding data under the new user (Option A, §9). No
+> service-role key is required for that path.
+> **Social login (Google / Apple / Microsoft) is in v1.** **TODO:** add OAuth sign-in
+> (Supabase OAuth providers) to back the social buttons in the login sheet.
 
-### Profiles
+### Onboarding write (Option A) — **TODO**
 ```
-GET   /api/profiles/me
-PATCH /api/profiles/me
-GET   /api/tutors                    # Browse tutors: ?category=&district=&lang=&minRate=&maxRate=&format=&type=&day=&slot=
-GET   /api/tutors/[slug]             # Single tutor (SSR, public)
-POST  /api/tutors                    # Create tutor profile       [auth]
-PATCH /api/tutors/[slug]             # Update own profile         [auth, owner]
-GET   /api/students                  # Tutors browse student/parent listings [auth, tutor]
+POST  /api/onboarding      [todo]  one-shot: after signup, write all collected onboarding
+                                   data for the role (student/parent+children/tutor) in a
+                                   single authenticated request. See §9 for the per-role payload.
 ```
+> Today `signup` writes nothing beyond the `profiles` row. This endpoint (or a documented
+> sequence of the existing endpoints) must persist the in-memory onboarding store.
+
+### Profiles & editing
+```
+GET   /api/profiles/me     [todo]  (currently only PATCH exists; GET lives at /api/auth/me)
+PATCH /api/profiles/me     [v1]    display_name + (TODO: role-specific preference fields)
+DELETE /api/profiles/me    [todo]  delete own account (all three roles)
+```
+> **Profile editing (v1):** all roles edit their onboarding preferences from the profile
+> screen. Tutors edit profile picture, bio, WhatsApp/Instagram/WeChat, categories,
+> availability, rates, districts, languages, and `is_published` (self-publish/unpublish).
+> Students/parents edit any onboarding preference. **TODO:** extend `PATCH /api/profiles/me`
+> (and the tutor/child endpoints) to cover all editable fields.
+
+### Tutors / browse
+```
+GET   /api/tutors          [v1]   browse: ?subcategory_id=&district=&tutoring_format=&tutoring_type=&min_rate=&max_rate=&page=
+GET   /api/tutors/[slug]   [v1]   single tutor (public; includes posts)
+POST  /api/tutors          [v1]   create tutor profile (is_published defaults false)  [auth, role=tutor]
+PATCH /api/tutors/[slug]   [v1]   update own profile, incl. is_published + new contact fields  [auth, owner]
+```
+> **TODO:** extend `GET /api/tutors` filters and `POST`/`PATCH` bodies to the full v1 set
+> (instagram_handle, wechat_id, languages, districts, etc.).
 
 ### Home Feed
 ```
-GET   /api/feed                      # Personalised matches for current user [auth optional]
-                                     # Guests: returns unfiltered recent tutors
+GET   /api/feed            [v1]   personalized matches for a seeker; guests/others get latest tutors
 ```
 
 ### Categories
 ```
-GET   /api/categories                # All categories + subcategories (for dropdowns)
+GET   /api/categories      [v1]   all categories + subcategories
 ```
 
-### Tutor Subjects
+### Availability
 ```
-GET    /api/tutors/[slug]/subjects
-POST   /api/tutors/[slug]/subjects          [auth, owner]
-PATCH  /api/tutors/[slug]/subjects/[id]     [auth, owner]
-DELETE /api/tutors/[slug]/subjects/[id]     [auth, owner]
+GET   /api/availability    [v1]   caller's availability  [auth]
+PUT   /api/availability    [v1]   full-replace caller's availability (role-routed)  [auth]
 ```
-
-### Tutor Availability
-```
-GET   /api/tutors/[slug]/availability
-PUT   /api/tutors/[slug]/availability       [auth, owner] — replaces full availability set
-```
+> **TODO:** migrate request/response from morning/afternoon/evening to precise
+> start/end ranges (§4.3); accept a `child_id` for parents.
 
 ### Posts
 ```
-GET    /api/tutors/[slug]/posts             # Paginated, public
-POST   /api/tutors/[slug]/posts             [auth, owner]
-DELETE /api/posts/[id]                      [auth, owner]
-POST   /api/posts/[id]/likes                [auth]        — v2, schema ready
-GET    /api/posts/[id]/comments             — v2, schema ready
-POST   /api/posts/[id]/comments             [auth]        — v2, schema ready
-```
-
-### Inquiries
-```
-POST  /api/tutors/[slug]/inquiries          # No auth required
-GET   /api/inquiries                        [auth, tutor — own received inquiries]
-PATCH /api/inquiries/[id]                   [auth, tutor — update status]
-```
-
-### Chat
-```
-GET   /api/conversations                    [auth]
-POST  /api/conversations                    [auth] — start conversation
-GET   /api/conversations/[id]/messages      [auth, participant]
-POST  /api/conversations/[id]/messages      [auth, participant]
-```
-Real-time: subscribe via Supabase Realtime channel on `messages` table filtered by `conversation_id`.
-
-### Notifications
-```
-GET   /api/notifications                    [auth]
-PATCH /api/notifications/[id]               [auth — mark read]
-PATCH /api/notifications/read-all           [auth]
-POST  /api/push-tokens                      [auth — register device]
-DELETE /api/push-tokens/[id]                [auth]
+GET    /api/tutors/[slug]/posts   [v1]  paginated, public
+POST   /api/tutors/[slug]/posts   [v1]  create post  [auth, owner]
+DELETE /api/posts/[id]            [todo]
 ```
 
 ### Saved Filters
 ```
-GET   /api/filters                          [auth]
-PUT   /api/filters                          [auth — upsert]
+GET   /api/filters         [v1]   caller's saved filter preferences  [auth]
+PUT   /api/filters         [v1]   upsert (full replace)              [auth]
 ```
 
-### Upload
+### Dormant / out of v1 (exist but not wired — do not build UI)
 ```
-POST  /api/upload                           [auth — returns Supabase Storage URL]
+POST  /api/tutors/[slug]/inquiries          [dormant]
+GET   /api/conversations                    [dormant]
+POST  /api/conversations                    [dormant]
+GET   /api/conversations/[id]/messages      [dormant]
+POST  /api/conversations/[id]/messages      [dormant]
+(no notification / push endpoints — out of v1)
+(no /api/upload yet — Storage upload path is TODO for posts/avatars)
 ```
 
 ---
 
-## 6. MVP vs V2 Flags
+## 6. Matching Algorithm (v1)
 
-### Build in MVP
-- [x] Tutor social profile (bio + post feed with photos)
-- [x] Public tutor browse — category + district filter only
-- [x] WhatsApp redirect + inquiry form contact
-- [x] Tutor account creation + profile setup
-- [x] Guest home feed — latest published tutors, no personalisation
-- [x] Categories + subcategories (category, subcategory, years experience, hourly rate only)
-- [x] Schema for likes/comments (build UI later)
+`GET /api/feed` personalizes for a seeker; guests and others get the latest published
+tutors (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC
+`match_tutors_for_seeker(...)` (`SECURITY DEFINER`, caller via `auth.uid()`), to be
+**reworked** for v1:
 
-- [x] **Personalised home feed matching** — `GET /api/feed` ranks published tutors for an authenticated student/parent with ≥1 category interest via the `match_tutors_for_seeker` RPC (soft weighted similarity: category 40, availability/district/language/format-type-budget 15 each, missing dimensions renormalized). Seeker availability captured in `seeker_availability` via `PUT /api/availability`. See `0003_seeker_availability_and_matching.sql`.
+**Weighting order (most → least important):**
+1. **Subject / category** match
+2. **Availability** match — **real time-overlap** of precise ranges (§4.3), not bucket equality
+3. **Price** range match — tutor rate within the seeker's budget
+4. **Preferred language** match
+5. **District** match (dropped for online-only tutors)
 
-### Defer to V2
-- [ ] **Student and parent accounts** — parents can browse and contact without an account; defer until chat ships, which is the first feature requiring login
-- [ ] **Tutor onboarding carousel** — requires real profiles to populate; build after 10–15 tutors are live
-- [ ] **Per-subject achievements, qualifications, exam results** — too heavy for tutor onboarding in v1; show category + subcategory + experience + rate only; add detail fields in v1.1
-- [ ] **Real-time chat** — use WhatsApp + inquiry form for v1
-- [ ] **Push notifications** — use Resend email for v1; add FCM/APNs with mobile app
-- [ ] **Reverse matching feed** (tutors browsing students) — student profiles must exist first
-- [ ] **Post likes & comments** — schema is ready; hold UI until post volume justifies it
-- [ ] **Full bilingual content** — start English-only; ZH bio is optional for tutors
-- [ ] **Saved filter preferences** — low priority until there are enough tutors to warrant repeat filtering
-- [ ] **Calendar / per-date availability scheduling** — v1 uses recurring `day_of_week × time_slot` buckets (`tutor_availability` / `seeker_availability`) for matching; specific-date scheduling is deferred
-- [ ] **Advanced search** (price, format, language, time slot) — add in v1.1 once category + district are validated
-- [ ] **University verification badge** — manual process; defer until tutor volume justifies it
+- Weights are an **operator-tunable config** (single obvious place — the five integer
+  literals in the matching migration). **No end-user-facing weight controls in v1.**
+- **Soft scoring + graceful degradation:** no hard exclusions and **never an empty state** —
+  if nothing matches well, the feed still returns the closest available tutors. A dimension
+  with no data on either side is dropped and the remaining weights renormalize.
+- **Per child:** for parents, matching runs **per child** (each child is a seeker with its
+  own interests/availability/preferences). **TODO:** the RPC must accept/identify the child
+  being matched (e.g. `child_id` argument) instead of assuming one seeker per account.
+- **TODO (open):** the brief's 5 ranked factors do **not** mention tutoring *format* /
+  *type*. Decide whether format/type remain a (minor/zero) weighted signal or become a hard
+  filter. Until confirmed, keep them out of the weighted score.
+- **TODO (migration):** replace the bucket-based availability join, separate **price** into
+  its own weighted dimension, and reorder weights to the order above.
 
 ---
 
-## 7. Data Flow Notes
+## 7. MVP vs out-of-scope
 
-- **Guest home feed**: Returns recently published tutors, ordered by created_at. No personalisation until profile setup is done.
-- **Matched home feed**: `match_tutors_for_seeker(p_page, p_page_size)` RPC scores every published tutor with a soft weighted similarity (no hard `WHERE` exclusions) across category-interest overlap, availability-slot overlap, district, preferred language, and format/type/budget, then `ORDER BY score DESC`. `/api/feed` hydrates full tutor cards for the ranked page. A dimension lacking data on either side is dropped and the remaining weights renormalize.
-- **Tutor profile page** (`/tutors/[slug]`): SSR with `revalidate = 60`. Fetches profile + first 10 posts server-side for SEO. Posts paginate client-side.
-- **WhatsApp fallback**: If tutor has `whatsapp_number` set, inquiry button opens `https://wa.me/[number]?text=Hi, I found you on LearnSum...` instead of submitting the form.
-- **Tutor onboarding**: Signup → `profiles` row auto-created via Supabase trigger → shown sample carousel → fills `tutor_profiles` + subjects → `is_published = true` makes discoverable.
-- **Chat real-time**: Supabase Realtime — client subscribes to channel `conversation:[id]`, server inserts to `messages`, broadcast triggers client update. On new message, server function inserts a `notifications` row and (v2) sends push via FCM.
+### Build in v1
+- [x] Tutor social profile (bio + post feed with photos/video)
+- [x] Tutor onboarding (Option A) incl. per-subject experience, achievements, qualifications, pay, availability
+- [x] Tutor "complete your profile" + explicit publish / self-unpublish
+- [x] Public tutor browse with the **full filter set**
+- [x] **Personalized weighted matching feed** (subject > availability > price > language > district), per child for parents
+- [x] Guest feed — latest published tutors, `created_at` DESC, unfiltered
+- [x] WhatsApp + Instagram + WeChat contact buttons
+- [x] Saved filter preferences + Quick Match card
+- [x] Posts: creation + feed viewer
+- [x] Profile editing for all roles + account deletion
+- [x] Email + password auth **and** social login (Google/Apple/Microsoft)
+- [x] Schema for likes/comments (no interaction UI)
+
+### Explicitly OUT of v1
+- [ ] In-app chat / messaging (schema + endpoints exist, **dormant**; planned v2)
+- [ ] Inquiry form (schema + endpoint exist, **dormant**)
+- [ ] Push notifications **and** in-app notifications (fully out)
+- [ ] Post likes & comments UI (schema only)
+- [ ] Calendar / per-date scheduling (availability is recurring weekday ranges only)
+- [ ] Tutor onboarding sample-profile carousel (placeholder only — needs real profiles)
+- [ ] University verification badge
+
+---
+
+## 8. Data Flow Notes
+
+- **Guest feed:** published tutors, `created_at` DESC, no personalization.
+- **Matched feed:** `match_tutors_for_seeker(...)` scores every published tutor by the
+  weighted similarity in §6, `ORDER BY score DESC`; `/api/feed` hydrates full cards for the
+  page. Runs per child for parents.
+- **Tutor profile page** (`/tutors/[slug]`): profile + first posts; contact buttons for
+  every configured method.
+- **Onboarding → account:** browse freely → fill role onboarding → enter email + password
+  on the final step → account created (session live, no email verification) → all onboarding
+  data written in one shot. Tutor lands unpublished with a "complete your profile" prompt.
+
+---
+
+## 9. Onboarding & Auth (Option A)
+
+Credentials are collected **last**. The in-memory onboarding store (frontend
+`components/onboarding/onboardingStore.ts`) holds everything until then; on credential
+submit the app creates the account and persists the store. Email verification is **off**
+so the new account is immediately usable.
+
+**Per-role data to persist** (see the backend `CLAUDE.md` "Frontend integration notes" for
+exact store keys and field shapes):
+
+- **Student:** `school_level`; subject interests → `user_category_interests`; preferences
+  (format, preferred districts[], preferred languages[], availability ranges).
+- **Parent:** parent account (+ `searching_for_self`); **one `child_profiles` row per
+  child** (name, `school_level`); per-child interests → `child_category_interests`; per-child
+  preferences + availability.
+- **Tutor:** `tutor_profiles` (`slug`, `university`, format/type, **is_published = false**);
+  teaching levels; subjects → `tutor_subcategories` (years, pay, achievements,
+  qualifications, experience); teaching languages + proficiency; availability ranges.
+  Contact details (WhatsApp/Instagram/WeChat) + bio + photo are completed on the post-
+  onboarding "complete your profile" screen, then the tutor publishes.
+
+> **TODO:** the one-shot write path (`POST /api/onboarding` or a documented sequence) does
+> not exist yet — see §5. Category selections and district labels must be mapped to backend
+> IDs/enums (§4.2, §4.10) before they can be stored.
