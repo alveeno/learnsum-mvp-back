@@ -52,7 +52,7 @@ Every role can edit its onboarding preferences from the profile screen and **del
 v1 onboarding collects `subcategory_id`, `years_experience`, pay, **and** `achievements`, `qualifications`, `exam_results` (the tutor "Strengths & Details" screen already collects them). It also collects a free-text "relevant experience" list (needs a column — TODO) and a single pay figure per subject (map to `hourly_rate_min`/`max` — TODO).
 
 ### Parent children (NEW)
-A parent's tutoring preferences are **per child**, not on the parent. Each child is a `child_profiles` row (name, `school_level`, format/type/budget, preferred languages/districts) with its own `child_category_interests` and availability. **Matching runs per child.** (Requires new migrations — TODO in `plan.md §4.1`.)
+A parent's tutoring preferences are **per child**, not on the parent. Each child is a `child_profiles` row (name, `school_level`, format/type/budget, preferred languages/districts) with its own `child_category_interests` and availability. **Matching runs per child.** (Tables added in migration `0006`, owner-only/private ✅; per-child matching + onboarding write still TODO.)
 
 ### Availability — precise time ranges (REDESIGNED)
 v1 stores **precise start/end minute ranges per weekday**, not `morning|afternoon|evening` buckets. The `time_slot` enum is removed; `tutor_availability` / `seeker_availability` use `start_min`/`end_min`; multiple ranges per day allowed. Written via `PUT /api/availability` (role-routed; parents scope to a `child_id` — TODO). Requires migration (TODO, `plan.md §4.3`).
@@ -76,7 +76,7 @@ Do not build these even if they seem natural extensions of adjacent work:
 
 ## Migrations note
 
-`supabase/migrations/`: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`, `0004_tutor_contact_columns.sql` (Instagram/WeChat), `0005_school_level_six_values.sql` (4→6 education levels). The stale `0002_rls_policies.sql` duplicate has been removed. **Applied to live Supabase:** 0001, 0002, 0004. **Not yet applied:** 0003 (matching/availability — to be superseded by the precise-range redesign) and 0005. Remaining v1 migrations still to write (`0006+`): precise-range availability, `tutor_languages` + expanded language set, `child_profiles` + `child_category_interests`, and the reworked matching RPC.
+`supabase/migrations/`: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`, `0004_tutor_contact_columns.sql` (Instagram/WeChat), `0005_school_level_six_values.sql` (4→6 education levels), `0006_child_profiles.sql` (per-child seeker tables, owner-only). The stale `0002_rls_policies.sql` duplicate has been removed. **Applied to live Supabase:** 0001, 0002, 0004. **Not yet applied:** 0003 (matching/availability — to be superseded by the precise-range redesign), 0005, and 0006. Remaining v1 migrations still to write (`0007+`): precise-range availability, `tutor_languages` + expanded language set, and the reworked matching RPC.
 
 ---
 
@@ -145,4 +145,4 @@ avail:      Record<"mon".."sun", { start: number, end: number }[]>  // MINUTES f
 | `Detail.achievements` `string[]` | `achievements jsonb {en,zh}` | Wrap/translate |
 | `Detail.quals` (structured) | `qualifications jsonb` | Serialize |
 | `Detail.experiences` | *(none)* | Needs a column (TODO) |
-| `parent:roster` + per-child keys | `child_profiles` (+ `child_category_interests`) | New tables (TODO) |
+| `parent:roster` + per-child keys | `child_profiles` (+ `child_category_interests`) | New tables added in `0006` ✅ |

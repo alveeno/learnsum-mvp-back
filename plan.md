@@ -77,10 +77,10 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed.) **Done:** 0004 (contact columns), 0005 (6-value education enum).
-> **Still to write** (`0006+`): the precise time-range availability redesign, the expanded language set +
-> `tutor_languages`, per-child tables, and the reworked matching RPC. These are flagged **TODO (migration)** inline.
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables).
+> **Still to write** (`0007+`): the precise time-range availability redesign, the expanded language set +
+> `tutor_languages`, and the reworked matching RPC. These are flagged **TODO (migration)** inline.
 
 ### 4.1 Auth & Core Profiles
 
@@ -137,7 +137,8 @@ preferred_languages     text[]
 preferred_districts     text[]
 created_at              timestamptz
 ```
-> **TODO (migration):** create `child_profiles`. A parent can have 1–6 children, each
+> **DONE (migration 0006):** created `child_profiles` with owner-only RLS (private — children
+> are minors; matching reads via the SECURITY DEFINER RPC). A parent can have 1–6 children, each
 > with its own interests + availability (below). Matching runs **per child** (§6).
 
 **`tutor_profiles`** — one-to-one with profiles where role = 'tutor'
@@ -193,7 +194,7 @@ slug         text  UNIQUE
 user_category_interests   (id, profile_id  FK → profiles,       subcategory_id, UNIQUE(profile_id, subcategory_id))   — students
 child_category_interests  (id, child_id    FK → child_profiles, subcategory_id, UNIQUE(child_id, subcategory_id))     — NEW, per child
 ```
-> **TODO (migration):** add `child_category_interests`.
+> **DONE (migration 0006):** added `child_category_interests` (owner-only via the child's parent).
 
 **`tutor_subcategories`** — what a tutor teaches, with per-subject detail
 ```
@@ -370,7 +371,8 @@ KwaiTsing | TsuenWan | TuenMun | YuenLong | North | TaiPo | SaiKung | ShaTin | I
 |---|---|---|
 | `tutor_profiles` | `is_published = true` only | Owner only |
 | `posts` + `post_media` | All rows | Owner only |
-| `student_profiles`, `child_profiles` | All rows (tutors may browse) | Owner only |
+| `student_profiles` | All rows (tutors may browse) | Owner only |
+| `child_profiles` | **Owner only** (private — minors; matching reads via SECURITY DEFINER) | Owner only |
 | `tutor_subcategories`, `*_availability`, `*_category_interests` | per matching needs | Owner only |
 | `saved_filter_preferences` | Owner only | Owner only |
 | `inquiries` *(dormant)* | Tutor sees their own | Anyone INSERT; tutor UPDATE status |
