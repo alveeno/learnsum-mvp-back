@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 
 const PAGE_SIZE = 20
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 // Nested select shared by both feed paths. `id` is needed to re-attach scores
 // in the personalized path; it is not exposed in the response.
 const TUTOR_SELECT = `
@@ -72,17 +75,23 @@ export async function GET(request: Request) {
   const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1
   const offset = (page - 1) * PAGE_SIZE
 
+  // Parents browse per child; students browse for themselves.
+  const childId = searchParams.get('child_id')
+
   const supabase = await createClient()
 
   // --- Decide guest vs personalized ---
-  // Matching runs only for an authenticated student/parent who has expressed
-  // at least one category interest. Everyone else (guests, tutors, seekers with
-  // no interests yet) gets the latest-tutors feed.
+  // Matching runs for an authenticated seeker with ≥1 category interest:
+  //   student → their own interests;  parent → the selected child's interests.
+  // Everyone else (guests, tutors, seekers with no interests, parents who
+  // haven't picked a child) gets the latest-tutors feed.
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   let personalized = false
+  let pChildId: string | null = null
+
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -90,18 +99,33 @@ export async function GET(request: Request) {
       .eq('id', user.id)
       .single()
 
-    if (profile?.role === 'student' || profile?.role === 'parent') {
-      const { count: interestCount } = await supabase
+    if (profile?.role === 'student') {
+      const { count } = await supabase
         .from('user_category_interests')
         .select('*', { count: 'exact', head: true })
         .eq('profile_id', user.id)
+      personalized = (count ?? 0) > 0
+    } else if (profile?.role === 'parent' && childId && UUID_REGEX.test(childId)) {
+      // child_profiles RLS is owner-only, so this resolves only the parent's own child.
+      const { data: child } = await supabase
+        .from('child_profiles')
+        .select('id')
+        .eq('id', childId)
+        .single()
 
-      personalized = (interestCount ?? 0) > 0
+      if (child) {
+        const { count } = await supabase
+          .from('child_category_interests')
+          .select('*', { count: 'exact', head: true })
+          .eq('child_id', childId)
+        personalized = (count ?? 0) > 0
+        if (personalized) pChildId = childId
+      }
     }
   }
 
   if (personalized) {
-    return personalizedFeed(supabase, page, offset)
+    return personalizedFeed(supabase, page, offset, pChildId)
   }
   return latestFeed(supabase, page, offset)
 }
@@ -113,15 +137,17 @@ export async function GET(request: Request) {
 async function personalizedFeed(
   supabase: Awaited<ReturnType<typeof createClient>>,
   page: number,
-  offset: number
+  offset: number,
+  childId: string | null
 ) {
   const { data: ranked, error: rpcError } = await supabase.rpc('match_tutors_for_seeker', {
+    p_child_id: childId,
     p_page: page,
     p_page_size: PAGE_SIZE,
   })
 
   if (rpcError) {
-    // PGRST202 = function not found — the 0003 migration isn't applied yet.
+    // PGRST202 = function not found — migration 0008 isn't applied yet.
     // Degrade gracefully to the latest-tutors feed instead of 500-ing.
     if (rpcError.code === 'PGRST202') {
       console.warn('[feed] match_tutors_for_seeker missing — falling back to latest feed')

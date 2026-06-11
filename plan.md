@@ -77,9 +77,9 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed; 0003 is superseded by 0007.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability).
-> **Still to write** (`0008+`): the expanded language set + `tutor_languages`, and the reworked matching RPC. These are flagged **TODO (migration)** inline.
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC).
+> **Still to write** (`0009+`): the expanded language set + `tutor_languages` (incl. seeker `preferred_languages`/`districts` on `student_profiles`). Flagged **TODO (migration)** inline.
 
 ### 4.1 Auth & Core Profiles
 
@@ -493,13 +493,12 @@ tutors (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC
   if nothing matches well, the feed still returns the closest available tutors. A dimension
   with no data on either side is dropped and the remaining weights renormalize.
 - **Per child:** for parents, matching runs **per child** (each child is a seeker with its
-  own interests/availability/preferences). **TODO:** the RPC must accept/identify the child
-  being matched (e.g. `child_id` argument) instead of assuming one seeker per account.
-- **TODO (open):** the brief's 5 ranked factors do **not** mention tutoring *format* /
-  *type*. Decide whether format/type remain a (minor/zero) weighted signal or become a hard
-  filter. Until confirmed, keep them out of the weighted score.
-- **TODO (migration):** replace the bucket-based availability join, separate **price** into
-  its own weighted dimension, and reorder weights to the order above.
+  own interests/availability/preferences). **DONE (0008):** the RPC takes a `child_id`
+  argument; a child is matchable only by its parent (else the seeker resolves to no data).
+- **DECIDED (0008):** format/type are a minor **tie-breaker** (weight 3), not a hard filter;
+  the 5 named factors carry the rest of the score.
+- **DONE (migration 0008):** real time-overlap availability, **price** as its own weighted
+  dimension, and the reordered weights (40/25/15/10/7/3, subject→district).
 
 ---
 
