@@ -1,29 +1,40 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-// Schema enum values — must stay in sync with 0001_initial_schema.sql
+// Schema enum values — must stay in sync with 0001 / 0007.
 const VALID_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
-const VALID_SLOTS = new Set(['morning', 'afternoon', 'evening'])
+type Day = (typeof VALID_DAYS)[number]
 
-type AvailabilityMap = Record<string, string[]>
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-// Validates the { [day]: string[] } shape, mirroring /api/filters.
-// Example: { "mon": ["morning", "evening"], "sat": ["afternoon"] }
+// A time range in minutes from midnight: { start: 540, end: 720 } = 09:00–12:00.
+type Range = { start: number; end: number }
+type AvailabilityMap = Record<string, Range[]>
+
+// Validates { [day]: [{ start, end }, ...] } — minutes 0..1440, start < end.
 function validateAvailability(value: unknown): string | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return 'availability must be an object of the form { "mon": ["morning"], ... }'
+    return 'availability must be an object of the form { "mon": [{ "start": 540, "end": 720 }], ... }'
   }
 
-  for (const [day, slots] of Object.entries(value as Record<string, unknown>)) {
-    if (!VALID_DAYS.includes(day as (typeof VALID_DAYS)[number])) {
+  for (const [day, ranges] of Object.entries(value as Record<string, unknown>)) {
+    if (!VALID_DAYS.includes(day as Day)) {
       return `availability key "${day}" is invalid — must be one of: ${VALID_DAYS.join(', ')}`
     }
-    if (!Array.isArray(slots)) {
-      return `availability["${day}"] must be an array of time slots`
+    if (!Array.isArray(ranges)) {
+      return `availability["${day}"] must be an array of { start, end } ranges`
     }
-    for (const slot of slots) {
-      if (!VALID_SLOTS.has(slot)) {
-        return `availability["${day}"] contains invalid slot "${slot}" — must be one of: ${[...VALID_SLOTS].join(', ')}`
+    for (const r of ranges) {
+      if (typeof r !== 'object' || r === null || Array.isArray(r)) {
+        return `availability["${day}"] entries must be { start, end } objects (minutes from midnight)`
+      }
+      const { start, end } = r as { start?: unknown; end?: unknown }
+      if (!Number.isInteger(start) || !Number.isInteger(end)) {
+        return `availability["${day}"] start/end must be whole numbers (minutes from midnight)`
+      }
+      if ((start as number) < 0 || (end as number) > 1440 || (start as number) >= (end as number)) {
+        return `availability["${day}"] needs 0 ≤ start < end ≤ 1440`
       }
     }
   }
@@ -31,17 +42,27 @@ function validateAvailability(value: unknown): string | null {
   return null
 }
 
-// Picks the availability table + owner column for the caller's role.
-// Tutors store slots they can teach; students/parents store slots they need.
-function tableForRole(role: string) {
-  if (role === 'tutor') return { table: 'tutor_availability', ownerCol: 'tutor_id' } as const
-  if (role === 'student' || role === 'parent') {
-    return { table: 'seeker_availability', ownerCol: 'profile_id' } as const
+// Groups normalized rows into { [day]: ranges[] }, days Mon→Sun, ranges sorted.
+function groupRanges(
+  rows: Array<{ day_of_week: string; start_min: number; end_min: number }>
+): AvailabilityMap {
+  const map: AvailabilityMap = {}
+  for (const day of VALID_DAYS) {
+    const ranges = rows
+      .filter((r) => r.day_of_week === day)
+      .map((r) => ({ start: r.start_min, end: r.end_min }))
+      .sort((a, b) => a.start - b.start || a.end - b.end)
+    if (ranges.length) map[day] = ranges
   }
-  return null
+  return map
 }
 
-// Shared auth guard — returns { user } or a 401 response
+// Describes where a caller's availability lives: which table, and the
+// owner-identifying columns used both to filter (GET/delete) and to stamp on
+// inserted rows.
+type Target = { table: string; owner: Record<string, string> }
+
+// Shared auth guard — returns { user } or a 401 response.
 async function requireAuth(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
     data: { user },
@@ -54,11 +75,14 @@ async function requireAuth(supabase: Awaited<ReturnType<typeof createClient>>) {
   return { user, response: null }
 }
 
-// Resolves the caller's role and the table it owns availability in.
+// Resolves the caller's role → availability target.
+// Tutors store what they can teach; students store what they need; parents store
+// per child, so they must pass a child_id they own.
 async function resolveTarget(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string
-) {
+  userId: string,
+  childId: string | null
+): Promise<{ target: Target | null; response: NextResponse | null }> {
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('role')
@@ -69,69 +93,96 @@ async function resolveTarget(
     return { target: null, response: NextResponse.json({ error: 'Profile not found' }, { status: 404 }) }
   }
 
-  const target = tableForRole(profile.role)
-  if (!target) {
+  if (profile.role === 'tutor') {
+    return { target: { table: 'tutor_availability', owner: { tutor_id: userId } }, response: null }
+  }
+
+  if (profile.role === 'student') {
     return {
-      target: null,
-      response: NextResponse.json({ error: `role "${profile.role}" has no availability` }, { status: 400 }),
+      target: { table: 'seeker_availability', owner: { owner_id: userId, owner_type: 'student' } },
+      response: null,
     }
   }
-  return { target, response: null }
-}
 
-// Groups normalized rows into { [day]: slots[] }, days ordered Mon→Sun.
-function groupSlots(rows: Array<{ day_of_week: string; time_slot: string }>): AvailabilityMap {
-  const map: AvailabilityMap = {}
-  for (const day of VALID_DAYS) {
-    const slots = rows.filter((r) => r.day_of_week === day).map((r) => r.time_slot)
-    if (slots.length) map[day] = slots
+  if (profile.role === 'parent') {
+    if (!childId) {
+      return { target: null, response: NextResponse.json({ error: 'child_id is required for parents' }, { status: 400 }) }
+    }
+    if (!UUID_REGEX.test(childId)) {
+      return { target: null, response: NextResponse.json({ error: 'child_id must be a valid UUID' }, { status: 400 }) }
+    }
+    // child_profiles RLS is owner-only, so this only resolves the parent's own child.
+    const { data: child, error: childErr } = await supabase
+      .from('child_profiles')
+      .select('id')
+      .eq('id', childId)
+      .single()
+
+    if (childErr || !child) {
+      return { target: null, response: NextResponse.json({ error: 'Child not found' }, { status: 404 }) }
+    }
+
+    return {
+      target: { table: 'seeker_availability', owner: { owner_id: childId, owner_type: 'child' } },
+      response: null,
+    }
   }
-  return map
+
+  return {
+    target: null,
+    response: NextResponse.json({ error: `role "${profile.role}" has no availability` }, { status: 400 }),
+  }
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/availability
-// Returns the authenticated user's availability as { [day]: slots[] }.
-// Empty object if none set.
+// GET /api/availability        (parents: GET /api/availability?child_id=...)
+// Returns the caller's availability as { [day]: [{ start, end }] }.
 // ---------------------------------------------------------------------------
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient()
   const { user, response } = await requireAuth(supabase)
   if (!user) return response!
 
-  const { target, response: targetErr } = await resolveTarget(supabase, user.id)
+  const childId = new URL(request.url).searchParams.get('child_id')
+  const { target, response: targetErr } = await resolveTarget(supabase, user.id, childId)
   if (!target) return targetErr!
 
-  const { data, error } = await supabase
-    .from(target.table)
-    .select('day_of_week, time_slot')
-    .eq(target.ownerCol, user.id)
+  let query = supabase.from(target.table).select('day_of_week, start_min, end_min')
+  for (const [col, val] of Object.entries(target.owner)) query = query.eq(col, val)
+
+  const { data, error } = await query
 
   if (error) {
     console.error('[availability GET] Fetch error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ availability: groupSlots(data ?? []) })
+  return NextResponse.json({ availability: groupRanges(data ?? []) })
 }
 
 // ---------------------------------------------------------------------------
 // PUT /api/availability
-// Full-replace of the caller's availability. Body: { availability: { [day]: slots[] } }.
-// Pass {} to clear all slots.
+// Full-replace of the caller's availability.
+// Body: { availability: { [day]: [{ start, end }] }, child_id?: string }.
+// Pass availability: {} to clear all ranges. Parents must include child_id.
 // ---------------------------------------------------------------------------
 export async function PUT(request: Request) {
   const supabase = await createClient()
   const { user, response } = await requireAuth(supabase)
   if (!user) return response!
 
-  const { target, response: targetErr } = await resolveTarget(supabase, user.id)
-  if (!target) return targetErr!
-
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
+
+  const childId = (body as { child_id?: unknown }).child_id
+  if (childId !== undefined && typeof childId !== 'string') {
+    return NextResponse.json({ error: 'child_id must be a string' }, { status: 400 })
+  }
+
+  const { target, response: targetErr } = await resolveTarget(supabase, user.id, childId ?? null)
+  if (!target) return targetErr!
 
   const availability = (body as { availability?: unknown }).availability
   if (availability === undefined) {
@@ -143,20 +194,23 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: validationError }, { status: 400 })
   }
 
-  // Flatten to normalized rows, deduplicating slots within a day.
-  const rows: Array<Record<string, string>> = []
-  for (const [day, slots] of Object.entries(availability as AvailabilityMap)) {
-    for (const slot of new Set(slots)) {
-      rows.push({ [target.ownerCol]: user.id, day_of_week: day, time_slot: slot })
+  // Flatten to rows, deduplicating identical ranges within a day.
+  const rows: Array<Record<string, unknown>> = []
+  for (const [day, ranges] of Object.entries(availability as AvailabilityMap)) {
+    const seen = new Set<string>()
+    for (const { start, end } of ranges) {
+      const key = `${start}-${end}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      rows.push({ ...target.owner, day_of_week: day, start_min: start, end_min: end })
     }
   }
 
   // Full replace: clear existing rows, then insert the new set.
-  // RLS restricts both operations to the caller's own rows.
-  const { error: deleteError } = await supabase
-    .from(target.table)
-    .delete()
-    .eq(target.ownerCol, user.id)
+  // RLS restricts both operations to rows the caller owns.
+  let del = supabase.from(target.table).delete()
+  for (const [col, val] of Object.entries(target.owner)) del = del.eq(col, val)
+  const { error: deleteError } = await del
 
   if (deleteError) {
     console.error('[availability PUT] Delete error:', deleteError)
@@ -166,11 +220,11 @@ export async function PUT(request: Request) {
   if (rows.length) {
     const { error: insertError } = await supabase.from(target.table).insert(rows)
     if (insertError) {
-      // A tutor without a tutor_profiles row yet fails either the FK (23503)
-      // or the owner-check RLS policy (42501) — both mean "no profile yet".
+      // A tutor without a tutor_profiles row yet fails the FK (23503) or the
+      // owner-check RLS policy (42501) — both mean "no profile yet".
       if (insertError.code === '23503' || insertError.code === '42501') {
         return NextResponse.json(
-          { error: 'Create your tutor profile before setting availability' },
+          { error: 'Create your profile before setting availability' },
           { status: 409 }
         )
       }

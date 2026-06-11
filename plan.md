@@ -77,10 +77,9 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables).
-> **Still to write** (`0007+`): the precise time-range availability redesign, the expanded language set +
-> `tutor_languages`, and the reworked matching RPC. These are flagged **TODO (migration)** inline.
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed; 0003 is superseded by 0007.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability).
+> **Still to write** (`0008+`): the expanded language set + `tutor_languages`, and the reworked matching RPC. These are flagged **TODO (migration)** inline.
 
 ### 4.1 Auth & Core Profiles
 
@@ -248,11 +247,10 @@ day_of_week  enum        'mon'..'sun'
 start_min    int
 end_min      int
 ```
-> **TODO (migration):** drop the `time_slot` enum; replace both availability tables with
-> the `start_min`/`end_min` shape above; add `owner_type` so a child's availability is
-> distinguishable from a student's. Multiple ranges per day are allowed.
-> Both sides are still written via `PUT /api/availability` (role-routed; for parents,
-> scoped to a specific child — **TODO**: accept a `child_id`).
+> **DONE (migration 0007):** dropped the `time_slot` enum; both availability tables now use
+> the `start_min`/`end_min` shape with `owner_type` (`student`|`child`) on `seeker_availability`;
+> multiple ranges per day allowed. `GET`/`PUT /api/availability` reworked to the range shape
+> (role-routed; parents pass a `child_id`). Supersedes 0003 — do not apply 0003.
 
 ---
 
@@ -447,8 +445,7 @@ GET   /api/categories      [v1]   all categories + subcategories
 GET   /api/availability    [v1]   caller's availability  [auth]
 PUT   /api/availability    [v1]   full-replace caller's availability (role-routed)  [auth]
 ```
-> **TODO:** migrate request/response from morning/afternoon/evening to precise
-> start/end ranges (§4.3); accept a `child_id` for parents.
+> **DONE (0007):** request/response use precise `{ [day]: [{start,end}] }` minute ranges; parents pass a `child_id`.
 
 ### Posts
 ```

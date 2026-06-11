@@ -55,7 +55,7 @@ v1 onboarding collects `subcategory_id`, `years_experience`, pay, **and** `achie
 A parent's tutoring preferences are **per child**, not on the parent. Each child is a `child_profiles` row (name, `school_level`, format/type/budget, preferred languages/districts) with its own `child_category_interests` and availability. **Matching runs per child.** (Tables added in migration `0006`, owner-only/private ✅; per-child matching + onboarding write still TODO.)
 
 ### Availability — precise time ranges (REDESIGNED)
-v1 stores **precise start/end minute ranges per weekday**, not `morning|afternoon|evening` buckets. The `time_slot` enum is removed; `tutor_availability` / `seeker_availability` use `start_min`/`end_min`; multiple ranges per day allowed. Written via `PUT /api/availability` (role-routed; parents scope to a `child_id` — TODO). Requires migration (TODO, `plan.md §4.3`).
+v1 stores **precise start/end minute ranges per weekday**, not `morning|afternoon|evening` buckets. The `time_slot` enum is removed; `tutor_availability` / `seeker_availability` use `start_min`/`end_min`; multiple ranges per day allowed. Written via `GET`/`PUT /api/availability` (role-routed; parents pass a `child_id`). **Done in migration `0007` ✅** (tables + endpoint reworked; children's per-child availability is code-complete but not live-testable until a children-creation endpoint exists).
 
 ### Two-sided matching (seeker → tutors)
 `GET /api/feed` is personalized for an authenticated seeker (a `student`, or a `parent`'s `child`) with ≥1 category interest; everyone else (guests, tutors, seekers with no interests) gets the latest-tutors feed (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC `match_tutors_for_seeker(...)` (`SECURITY DEFINER`, caller via `auth.uid()`). **v1 weighting order, most → least important: subject/category → availability (real time-overlap) → price → preferred language → district** (district dropped for online-only tutors). Scoring is **soft** with **graceful degradation — never an empty state**; a dimension with no data on either side is dropped and remaining weights renormalize. Weights are an **operator-tunable config** (the integer literals in the matching migration) — **no end-user weight UI in v1**. The RPC must be reworked for precise time-overlap, a separate price dimension, the new weight order, and **per-child** matching (TODO, `plan.md §6`).
@@ -76,7 +76,7 @@ Do not build these even if they seem natural extensions of adjacent work:
 
 ## Migrations note
 
-`supabase/migrations/`: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`, `0004_tutor_contact_columns.sql` (Instagram/WeChat), `0005_school_level_six_values.sql` (4→6 education levels), `0006_child_profiles.sql` (per-child seeker tables, owner-only). The stale `0002_rls_policies.sql` duplicate has been removed. **Applied to live Supabase:** 0001, 0002, 0004. **Not yet applied:** 0003 (matching/availability — to be superseded by the precise-range redesign), 0005, and 0006. Remaining v1 migrations still to write (`0007+`): precise-range availability, `tutor_languages` + expanded language set, and the reworked matching RPC.
+`supabase/migrations/`: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`, `0004_tutor_contact_columns.sql` (Instagram/WeChat), `0005_school_level_six_values.sql` (4→6 education levels), `0006_child_profiles.sql` (per-child seeker tables, owner-only), `0007_precise_availability.sql` (bucket→precise time ranges; rebuilds `seeker_availability` per-child). The stale `0002_rls_policies.sql` duplicate has been removed. **Applied to live Supabase:** 0001, 0002, 0004. **Not yet applied:** 0005, 0006, 0007 (run in that order). **`0003` is superseded by 0007 — do not apply it.** Remaining v1 migrations still to write (`0008+`): `tutor_languages` + expanded language set, and the reworked matching RPC.
 
 ---
 
@@ -139,7 +139,7 @@ avail:      Record<"mon".."sun", { start: number, end: number }[]>  // MINUTES f
 | `Prefs.districts` `"hk:Central & Western"` | `hk_district` enum `CentralWestern` | Strip region prefix + map label → enum; **multi → array** |
 | `Prefs.langs` (ids) + `Prefs.moreLangs` (labels) | `preferred_languages text[]` | Expanded language set; ids vs labels; **multi → array** |
 | `Prefs.langLevels` (tutor proficiency) | *(none)* | Needs `tutor_languages(tutor_id, language, proficiency)` (TODO) |
-| `Prefs.avail` minutes ranges | `*_availability.start_min/end_min` | After precise-range redesign (TODO); was bucket enum |
+| `Prefs.avail` minutes ranges | `*_availability.start_min/end_min` | Done in `0007` ✅ (precise ranges; parents per child) |
 | `Detail.years` `"30+"` | `years_experience int` | Parse `"30+"` → 30 |
 | `Detail.pay` single number | `hourly_rate_min/max` | Decide mapping (TODO) |
 | `Detail.achievements` `string[]` | `achievements jsonb {en,zh}` | Wrap/translate |
