@@ -39,7 +39,8 @@
       "Bash(bash *)",
       "Bash(python3 -c \"import json,sys; t=json.load\\(sys.stdin\\)['tutor']; print\\('keys present in GET response:'\\); [print\\(f'  {k:17}= {t.get\\(k\\)!r}', '\\(absent!\\)' if k not in t else ''\\) for k in \\('whatsapp_number','instagram_handle','wechat_id'\\)]\")",
       "Bash(node -e \"console.log\\(require\\('next/package.json'\\).version\\)\")",
-      "Skill(claude-api)"
+      "Skill(claude-api)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

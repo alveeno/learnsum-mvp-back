@@ -77,9 +77,9 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC).
-> **Still to write** (`0009+`): the expanded language set + `tutor_languages` (incl. seeker `preferred_languages`/`districts` on `student_profiles`). Flagged **TODO (migration)** inline.
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer).
+> **Still to write** (`0010+`): the expanded language set + `tutor_languages` (incl. seeker `preferred_languages`/`districts` on `student_profiles`). Flagged **TODO (migration)** inline.
 
 ### 4.1 Auth & Core Profiles
 
@@ -401,12 +401,15 @@ GET   /api/auth/me         [v1]  returns { user, profile }
 
 ### Onboarding write (Option A) — **TODO**
 ```
-POST  /api/onboarding      [todo]  one-shot: after signup, write all collected onboarding
+POST  /api/onboarding      [v1]   one-shot: after signup, write all collected onboarding
                                    data for the role (student/parent+children/tutor) in a
                                    single authenticated request. See §9 for the per-role payload.
 ```
-> Today `signup` writes nothing beyond the `profiles` row. This endpoint (or a documented
-> sequence of the existing endpoints) must persist the in-memory onboarding store.
+> **DONE (0009):** `POST /api/onboarding` maps the frontend's slugs/labels → backend IDs/enums
+> and persists the role's data atomically via the `complete_onboarding()` SQL function (one
+> transaction = all-or-nothing). Custom subjects + tutor levels/proficiency/experience are
+> skipped and reported (no DB home yet); seeker language/district go into the single
+> `profiles` columns for now (multi-value lists pending a later migration).
 
 ### Profiles & editing
 ```
@@ -564,6 +567,6 @@ exact store keys and field shapes):
   Contact details (WhatsApp/Instagram/WeChat) + bio + photo are completed on the post-
   onboarding "complete your profile" screen, then the tutor publishes.
 
-> **TODO:** the one-shot write path (`POST /api/onboarding` or a documented sequence) does
-> not exist yet — see §5. Category selections and district labels must be mapped to backend
-> IDs/enums (§4.2, §4.10) before they can be stored.
+> **DONE (0009):** `POST /api/onboarding` exists; it maps category slugs → `subcategories.id`
+> and district labels → `hk_district` codes (§4.2, §4.10) server-side, then writes atomically.
+> Custom subjects + tutor levels/proficiency/experience are skipped and reported (no DB home yet).
