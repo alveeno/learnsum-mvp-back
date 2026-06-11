@@ -77,6 +77,7 @@ Do not build these even if they seem natural extensions of adjacent work:
 ## Migrations note
 
 `supabase/migrations/`: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`, `0004_tutor_contact_columns.sql` (Instagram/WeChat), `0005_school_level_six_values.sql` (4→6 education levels), `0006_child_profiles.sql` (per-child seeker tables, owner-only), `0007_precise_availability.sql` (bucket→precise time ranges; rebuilds `seeker_availability` per-child), `0008_matching_rpc_rework.sql` (precise-overlap + price + per-child matching RPC), `0009_complete_onboarding.sql` (atomic one-shot onboarding writer). The stale `0002_rls_policies.sql` duplicate has been removed. **Applied to live Supabase:** 0001, 0002, 0004, 0005, 0006, 0007, 0008. **Not yet applied:** 0009. **`0003` is superseded by 0007/0008 — do not apply it.** Remaining v1 migration still to write: `tutor_languages` + expanded language set (incl. seeker `preferred_languages`/`districts` on `student_profiles`).
+`supabase/migrations/`: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`, `0004_tutor_contact_columns.sql` (Instagram/WeChat), `0005_school_level_six_values.sql` (4→6 education levels), `0006_child_profiles.sql` (per-child seeker tables, owner-only), `0007_precise_availability.sql` (bucket→precise time ranges; rebuilds `seeker_availability` per-child), `0008_matching_rpc_rework.sql` (precise-overlap + price + per-child matching RPC), `0009_complete_onboarding.sql` (atomic one-shot onboarding writer), `0010_language_refinement.sql` (`tutor_languages` + student language/district lists; matching + onboarding updated to use them). The stale `0002_rls_policies.sql` duplicate has been removed. **Applied to live Supabase:** 0001, 0002, 0004, 0005, 0006, 0007, 0008, 0009. **Not yet applied:** 0010. **`0003` is superseded by 0007/0008 — do not apply it.** **All v1 schema migrations are now written (0004–0010).**
 
 ---
 
@@ -137,8 +138,8 @@ avail:      Record<"mon".."sun", { start: number, end: number }[]>  // MINUTES f
 | `eduLevel` / child `level` (6 values) | `school_level` enum | Rebuilt 4 → 6 in migration `0005` ✅ |
 | `Prefs.format` | `tutoring_format(_pref)` | Values align (`in_person/online/both`) ✓ |
 | `Prefs.districts` `"hk:Central & Western"` | `hk_district` enum `CentralWestern` | Strip region prefix + map label → enum; **multi → array** |
-| `Prefs.langs` (ids) + `Prefs.moreLangs` (labels) | `preferred_languages text[]` | Expanded language set; ids vs labels; **multi → array** |
-| `Prefs.langLevels` (tutor proficiency) | *(none)* | Needs `tutor_languages(tutor_id, language, proficiency)` (TODO) |
+| `Prefs.langs` (ids) + `Prefs.moreLangs` (labels) | `preferred_languages text[]` | Reconciled by `/api/onboarding` → normalized lowercase list (0010) ✅ |
+| `Prefs.langLevels` (tutor proficiency) | `tutor_languages(tutor_id, language, proficiency)` | Added in `0010` ✅ (written via `/api/onboarding`) |
 | `Prefs.avail` minutes ranges | `*_availability.start_min/end_min` | Done in `0007` ✅ (precise ranges; parents per child) |
 | `Detail.years` `"30+"` | `years_experience int` | Parse `"30+"` → 30 |
 | `Detail.pay` single number | `hourly_rate_min/max` | Decide mapping (TODO) |

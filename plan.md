@@ -77,9 +77,9 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer).
-> **Still to write** (`0010+`): the expanded language set + `tutor_languages` (incl. seeker `preferred_languages`/`districts` on `student_profiles`). Flagged **TODO (migration)** inline.
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model).
+> **All v1 schema migrations are now written (0004–0010).**
 
 ### 4.1 Auth & Core Profiles
 
@@ -114,7 +114,7 @@ preferred_districts     text[]  array of district enums (see §4.10)
 ```
 > **DONE (migration 0005):** `school_level` rebuilt to the 6 values
 > (`kindergarten`, `primary`, `middle`, `high`, `university`, `adult`); legacy `secondary` removed (mapped to `middle`).
-> **TODO (migration):** add `preferred_languages` / `preferred_districts`.
+> **DONE (migration 0010):** added `preferred_languages` / `preferred_districts` text[].
 
 **`parent_profiles`** — one-to-one with profiles where role = 'parent'
 ```
@@ -157,9 +157,8 @@ created_at          timestamptz
 updated_at          timestamptz
 ```
 > **DONE (migration 0004):** added `instagram_handle`, `wechat_id` (wired into `POST`/`PATCH`/`GET /api/tutors/[slug]`). Tutor teaching
-> languages + proficiency are stored separately — **TODO (migration):** add a
-> `tutor_languages` table `(tutor_id, language, proficiency 1..4)` (the onboarding
-> "proficiency" UI has no home today).
+> languages + proficiency live in **`tutor_languages` `(tutor_id, language, proficiency 1..4)` —
+> added in migration 0010 ✅** and written via `/api/onboarding` (proficiency is display-only).
 
 ---
 
@@ -219,8 +218,9 @@ The seeker language selection and tutor teaching languages now include the exten
 from onboarding, not just three. Languages: `english`, `cantonese`, `mandarin`,
 `japanese`, `korean`, `french`, `spanish`, `german`, `italian`, `portuguese`, `thai`,
 `hindi`, `arabic` (extend as needed).
-> **TODO (migration):** the `preferred_language` enum (3 values) is replaced by this
-> expanded set used in `text[]` columns / `tutor_languages`. Decide enum-vs-text.
+> **DONE (0010):** the expanded set is stored as **text** (lowercase tokens) in `text[]`
+> columns (`preferred_languages` on seekers) and `tutor_languages.language`. The old 3-value
+> `preferred_language` enum stays (now vestigial for matching; `profiles.district` is still used).
 
 ---
 

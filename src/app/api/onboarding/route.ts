@@ -13,8 +13,6 @@ const VALID_LEVELS = new Set(['kindergarten', 'primary', 'middle', 'high', 'univ
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
 const VALID_TYPES = new Set(['individual', 'group', 'both'])
 const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer_not_to_say'])
-// profiles.preferred_language is still the original 3-value enum (single primary).
-const PRIMARY_LANGS = new Set(['english', 'cantonese', 'mandarin'])
 
 // HK district label → enum code (frontend sends "<region>:<Label>").
 const DISTRICT_LABEL_TO_ENUM: Record<string, string> = {
@@ -71,6 +69,26 @@ function mapLanguages(input: unknown): string[] {
     .map((x) => x.trim().toLowerCase())
     .filter(Boolean)
   return [...new Set(out)]
+}
+
+// Tutor teaching languages: accept { "english": 4, ... } (id→proficiency 1..4) or a string[].
+function mapTutorLanguages(input: unknown): Array<{ language: string; proficiency: number | null }> {
+  const out: Array<{ language: string; proficiency: number | null }> = []
+  const seen = new Set<string>()
+  const add = (lang: string, prof: number | null) => {
+    const l = lang.trim().toLowerCase()
+    if (!l || seen.has(l)) return
+    seen.add(l)
+    out.push({ language: l, proficiency: prof })
+  }
+  if (Array.isArray(input)) {
+    for (const x of input) if (typeof x === 'string') add(x, null)
+  } else if (input && typeof input === 'object') {
+    for (const [lang, lvl] of Object.entries(input as Record<string, unknown>)) {
+      add(lang, typeof lvl === 'number' && lvl >= 1 && lvl <= 4 ? Math.trunc(lvl) : null)
+    }
+  }
+  return out
 }
 
 // Map subject slugs → subcategory UUIDs; collect unknown/custom slugs.
@@ -165,19 +183,12 @@ export async function POST(request: Request) {
     const availErr = validateAvail(s.availability, 'student')
     if (availErr) return NextResponse.json({ error: availErr }, { status: 400 })
 
-    const langs = mapLanguages(s.languages)
-    const districts = mapDistricts(s.districts, skipped)
-
     resolved.student = {
       ...buildSeekerPrefs(s),
-      // primary language/district into the single profiles columns (multi-value pending a later migration)
-      preferred_language: langs.find((l) => PRIMARY_LANGS.has(l)) ?? null,
-      district: districts[0] ?? null,
+      preferred_languages: mapLanguages(s.languages),
+      preferred_districts: mapDistricts(s.districts, skipped),
       interest_subcategory_ids: mapSubjects(s.interests, slugToId, skipped),
       availability: (s.availability as Avail) ?? {},
-    }
-    if (langs.some((l) => !PRIMARY_LANGS.has(l)) || districts.length > 1) {
-      skipped.not_persisted_yet.push('student: only one primary language + district stored (multi-value lists pending a later migration)')
     }
   } else if (role === 'parent') {
     const p = (body as { parent?: Record<string, unknown> }).parent
@@ -241,10 +252,11 @@ export async function POST(request: Request) {
       tutoring_format: VALID_FORMATS.has(t.format as string) ? t.format : null,
       tutoring_type: VALID_TYPES.has(t.type as string) ? t.type : null,
       subjects,
+      languages: mapTutorLanguages(t.languages),
       availability: (t.availability as Avail) ?? {},
     }
-    // These tutor fields have no DB home yet — report rather than silently drop.
-    skipped.not_persisted_yet.push('tutor teaching levels, per-language proficiency, and the "relevant experience" list (pending tutor_languages + experience-column migrations)')
+    // Remaining tutor fields still have no DB home — report rather than silently drop.
+    skipped.not_persisted_yet.push('tutor teaching levels and the "relevant experience" list (no DB home yet)')
   }
 
   const { error: rpcError } = await supabase.rpc('complete_onboarding', { p_payload: resolved })
