@@ -62,9 +62,9 @@ async function resolveConversation(
 // ---------------------------------------------------------------------------
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: conversationId } = params
+  const { id: conversationId } = await params
   const { searchParams } = new URL(request.url)
 
   if (!UUID_REGEX.test(conversationId)) {
@@ -140,9 +140,9 @@ export async function GET(
 // ---------------------------------------------------------------------------
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: conversationId } = params
+  const { id: conversationId } = await params
 
   if (!UUID_REGEX.test(conversationId)) {
     return NextResponse.json({ error: 'Invalid conversation id' }, { status: 400 })

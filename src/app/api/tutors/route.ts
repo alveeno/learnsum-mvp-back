@@ -13,6 +13,9 @@ const VALID_DISTRICTS = new Set([
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
+const VALID_TYPES = new Set(['individual', 'group', 'both'])
+
 // Deduplicate and flatten categories per tutor — same logic as /api/feed
 function shapeTutor(tutor: {
   slug: string
@@ -260,6 +263,13 @@ export async function GET(request: Request) {
 // Slug must be lowercase letters, numbers, and hyphens, 3–80 chars
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,78}[a-z0-9]$|^[a-z0-9]{1,2}$/
 
+// Strip a leading "@" and surrounding spaces from an Instagram handle; "" → null
+function normalizeInstagram(handle: string | null | undefined): string | null {
+  if (handle == null) return null
+  const cleaned = handle.trim().replace(/^@+/, '').trim()
+  return cleaned === '' ? null : cleaned
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/tutors
 // Creates a tutor profile for the authenticated user.
@@ -315,7 +325,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { slug, bio, bio_zh, university, tutoring_format, tutoring_type, whatsapp_number } =
+  const {
+    slug, bio, bio_zh, university, tutoring_format, tutoring_type,
+    whatsapp_number, instagram_handle, wechat_id,
+  } =
     body as {
       slug?: string
       bio?: string
@@ -324,6 +337,8 @@ export async function POST(request: Request) {
       tutoring_format?: string
       tutoring_type?: string
       whatsapp_number?: string
+      instagram_handle?: string
+      wechat_id?: string
     }
 
   if (!slug?.trim()) {
@@ -368,6 +383,8 @@ export async function POST(request: Request) {
       tutoring_format: tutoring_format ?? null,
       tutoring_type: tutoring_type ?? null,
       whatsapp_number: whatsapp_number?.trim() ?? null,
+      instagram_handle: normalizeInstagram(instagram_handle),
+      wechat_id: wechat_id?.trim() ?? null,
       is_published: false,
     })
     .select()

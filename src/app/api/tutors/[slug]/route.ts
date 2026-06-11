@@ -8,11 +8,18 @@ const UUID_REGEX =
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
 const VALID_TYPES = new Set(['individual', 'group', 'both'])
 
+// Strip a leading "@" and surrounding spaces from an Instagram handle; "" → null
+function normalizeInstagram(handle: string | null | undefined): string | null {
+  if (handle == null) return null
+  const cleaned = handle.trim().replace(/^@+/, '').trim()
+  return cleaned === '' ? null : cleaned
+}
+
 export async function GET(
   _request: Request,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
-  const { slug } = params
+  const { slug } = await params
 
   // Use the anon-key client so RLS applies — unpublished tutors are
   // invisible to unauthenticated callers (policy: is_published = true OR auth.uid() = id)
@@ -33,6 +40,8 @@ export async function GET(
       tutoring_format,
       tutoring_type,
       whatsapp_number,
+      instagram_handle,
+      wechat_id,
       is_published,
       created_at,
       profiles (
@@ -126,9 +135,9 @@ export async function GET(
 // ---------------------------------------------------------------------------
 export async function PATCH(
   request: Request,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
-  const { slug } = params
+  const { slug } = await params
   const supabase = await createClient()
 
   const {
@@ -168,7 +177,10 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { bio, bio_zh, university, tutoring_format, tutoring_type, whatsapp_number, is_published } =
+  const {
+    bio, bio_zh, university, tutoring_format, tutoring_type,
+    whatsapp_number, instagram_handle, wechat_id, is_published,
+  } =
     body as {
       bio?: string | null
       bio_zh?: string | null
@@ -176,11 +188,14 @@ export async function PATCH(
       tutoring_format?: string | null
       tutoring_type?: string | null
       whatsapp_number?: string | null
+      instagram_handle?: string | null
+      wechat_id?: string | null
       is_published?: boolean
     }
 
   const allUndefined = [
-    bio, bio_zh, university, tutoring_format, tutoring_type, whatsapp_number, is_published,
+    bio, bio_zh, university, tutoring_format, tutoring_type,
+    whatsapp_number, instagram_handle, wechat_id, is_published,
   ].every((v) => v === undefined)
 
   if (allUndefined) {
@@ -215,6 +230,8 @@ export async function PATCH(
   if (tutoring_format !== undefined) updates.tutoring_format = tutoring_format
   if (tutoring_type !== undefined) updates.tutoring_type = tutoring_type
   if (whatsapp_number !== undefined) updates.whatsapp_number = whatsapp_number?.trim() ?? null
+  if (instagram_handle !== undefined) updates.instagram_handle = normalizeInstagram(instagram_handle)
+  if (wechat_id !== undefined) updates.wechat_id = wechat_id?.trim() ?? null
   if (is_published !== undefined) updates.is_published = is_published
 
   // RLS "tutor_profiles: owner update" (USING auth.uid() = id) enforces ownership at DB layer

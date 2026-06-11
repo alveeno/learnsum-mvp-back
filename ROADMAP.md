@@ -15,7 +15,7 @@ A Hong Kong-based two-sided tutoring marketplace with a social media twist. Pare
 
 **Three user types:** Parents, Students, Tutors — each with different permissions, profile fields, and home feed experiences.
 
-**Tech stack:** Next.js 14 (App Router, API only) + Supabase (Postgres) + TypeScript — deployed to Vercel as an API server. Frontend is React Native + Expo in a separate repository (`learnsum-mvp-expo-app`). There is no UI code in this repository.
+**Tech stack:** Next.js 16 (App Router, API only) + Supabase (Postgres) + TypeScript — deployed to Vercel as an API server. Frontend is React Native + Expo in a separate repository (`learnsum-mvp-expo-app`). There is no UI code in this repository.
 
 **Language support:** English and Traditional Chinese throughout.
 
@@ -151,7 +151,7 @@ Run `/init` if not already done. Confirm PLAN.md and CLAUDE.md are in the projec
 **Status: Complete**
 
 What was completed:
-- Next.js 14 App Router scaffold with TypeScript, Tailwind, ESLint
+- Next.js App Router scaffold with TypeScript, Tailwind, ESLint (scaffolded on 14, now on Next.js 16 — route handlers updated to `await params`)
 - Supabase client configured (src/lib/supabase/client.ts)
 - Supabase server client configured (src/lib/supabase/server.ts)
 - Session refresh middleware (src/middleware.ts)

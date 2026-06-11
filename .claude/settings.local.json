@@ -35,7 +35,10 @@
       "Bash(ls -la .last-update* .update*)",
       "Bash(cp .last-update-result.json .last-update-result.json.bak)",
       "Bash(rm -f .last-update-result.json)",
-      "Bash(grep -rnE \"learnsum-app|learnsum-mvp-1|learnsum-mvp-expo\\([^-]|$\\)\" learnsum-mvp-1/plan.md learnsum-mvp-1/CLAUDE.md learnsum-mvp-1/ROADMAP.md learnsum-mvp-expo/CLAUDE.md)"
+      "Bash(grep -rnE \"learnsum-app|learnsum-mvp-1|learnsum-mvp-expo\\([^-]|$\\)\" learnsum-mvp-1/plan.md learnsum-mvp-1/CLAUDE.md learnsum-mvp-1/ROADMAP.md learnsum-mvp-expo/CLAUDE.md)",
+      "Bash(bash *)",
+      "Bash(python3 -c \"import json,sys; t=json.load\\(sys.stdin\\)['tutor']; print\\('keys present in GET response:'\\); [print\\(f'  {k:17}= {t.get\\(k\\)!r}', '\\(absent!\\)' if k not in t else ''\\) for k in \\('whatsapp_number','instagram_handle','wechat_id'\\)]\")",
+      "Bash(node -e \"console.log\\(require\\('next/package.json'\\).version\\)\")"
     ]
   }
 }

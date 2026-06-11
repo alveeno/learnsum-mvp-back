@@ -11,7 +11,7 @@ LearnSum is a Hong Kong-based two-sided tutoring marketplace. Tutors build Insta
 
 ## Planned Stack
 
-- **Backend API:** Next.js 14 (App Router) — API routes only, no frontend pages or UI
+- **Backend API:** Next.js 16 (App Router) — API routes only, no frontend pages or UI. **Dynamic route handlers must `await params`** (`params` is a Promise in Next 15+; reading it synchronously yields `undefined` and silently breaks `[slug]`/`[id]` lookups).
 - **Frontend:** React Native + Expo (separate repo: `learnsum-mvp-expo-app`) — not in this repository
 - **Backend + DB:** Supabase — auth, Postgres, Storage (media)
 - **Email:** Resend (transactional) — **not wired in v1** (email verification off, notifications out)

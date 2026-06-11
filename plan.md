@@ -62,7 +62,7 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 | Layer | Choice | Reason |
 |---|---|---|
-| Backend API | Next.js 14 (App Router) | API routes only — no frontend pages or UI in this repo |
+| Backend API | Next.js 16 (App Router) | API routes only — no frontend pages or UI in this repo. Dynamic route handlers must `await params` (Promise in Next 15+). |
 | Frontend | React Native + Expo (separate repo: `learnsum-mvp-expo-app`) | Mobile-first UI, separate from the API server |
 | Backend + DB | Supabase | Auth + Postgres + Storage |
 | Email | Resend (transactional) | **Not wired in v1** — email verification is OFF and notifications are out of scope; reserved for v1.1+ |
