@@ -35,7 +35,7 @@ A guest browses freely; onboarding collects everything first and **email + passw
 `tutor_profiles.is_published = true` makes a profile publicly visible (RLS enforces this). After onboarding a tutor stays **unpublished**; the tutor home screen shows a persistent "complete your profile" prompt → a dedicated screen for bio, photo, WhatsApp, Instagram, WeChat and remaining details, then the tutor **explicitly publishes**. Tutors can **self-unpublish** (set `is_published = false`) from their profile. An account is required for: posting content and (dormant) chat.
 
 ### Contact flow — WhatsApp / Instagram / WeChat
-Three optional columns on `tutor_profiles`: `whatsapp_number`, `instagram_handle`, `wechat_id` (the latter two are **NEW** — migration `0004`, TODO). All optional, any combination; the profile page shows every configured button simultaneously. WhatsApp opens `wa.me/[number]?text=Hi, I found you on LearnSum and I'm interested in tutoring for [subject].`; Instagram opens the profile; WeChat opens with the WeChat ID. **No inquiry form** (the `inquiries` table + endpoint remain but are dormant). **No in-app messaging in v1.**
+Three optional columns on `tutor_profiles`: `whatsapp_number`, `instagram_handle`, `wechat_id` (the latter two added in migration `0004` ✅). All optional, any combination; the profile page shows every configured button simultaneously. WhatsApp opens `wa.me/[number]?text=Hi, I found you on LearnSum and I'm interested in tutoring for [subject].`; Instagram opens the profile; WeChat opens with the WeChat ID. **No inquiry form** (the `inquiries` table + endpoint remain but are dormant). **No in-app messaging in v1.**
 
 ### Profile editing & account deletion (all roles)
 Every role can edit its onboarding preferences from the profile screen and **delete its account**. Tutors edit: profile picture, bio, WhatsApp/Instagram/WeChat, categories, availability, rates, districts, languages, and `is_published`. Students/parents edit any onboarding preference. (Endpoint coverage is partial — TODO in `plan.md §5`.)
@@ -76,7 +76,7 @@ Do not build these even if they seem natural extensions of adjacent work:
 
 ## Migrations note
 
-`supabase/migrations/`: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`. **`0002_rls_policies.sql` is a stale duplicate of `0002_rls.sql` and should be removed.** The 0003 matching/availability migration is **not yet applied** to live Supabase. The v1 decisions need new migrations (`0004+`): contact columns, precise-range availability, 6-value `school_level`, expanded language set, `child_profiles` + `child_category_interests`, and the reworked matching RPC.
+`supabase/migrations/`: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`, `0004_tutor_contact_columns.sql` (Instagram/WeChat), `0005_school_level_six_values.sql` (4→6 education levels). The stale `0002_rls_policies.sql` duplicate has been removed. **Applied to live Supabase:** 0001, 0002, 0004. **Not yet applied:** 0003 (matching/availability — to be superseded by the precise-range redesign) and 0005. Remaining v1 migrations still to write (`0006+`): precise-range availability, `tutor_languages` + expanded language set, `child_profiles` + `child_category_interests`, and the reworked matching RPC.
 
 ---
 
@@ -134,7 +134,7 @@ avail:      Record<"mon".."sun", { start: number, end: number }[]>  // MINUTES f
 | Frontend (store) | Backend (column/enum) | Mismatch |
 |---|---|---|
 | `Interest.catId/subId` (slugs) | `subcategories.id` (uuid) | Must map slugs → UUIDs (or seed DB to match); customs need a strategy |
-| `eduLevel` / child `level` (6 values) | `school_level` enum | Backend expands 4 → 6 (TODO) |
+| `eduLevel` / child `level` (6 values) | `school_level` enum | Rebuilt 4 → 6 in migration `0005` ✅ |
 | `Prefs.format` | `tutoring_format(_pref)` | Values align (`in_person/online/both`) ✓ |
 | `Prefs.districts` `"hk:Central & Western"` | `hk_district` enum `CentralWestern` | Strip region prefix + map label → enum; **multi → array** |
 | `Prefs.langs` (ids) + `Prefs.moreLangs` (labels) | `preferred_languages text[]` | Expanded language set; ids vs labels; **multi → array** |

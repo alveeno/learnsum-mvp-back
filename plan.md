@@ -76,11 +76,11 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 ## 4. Database Schema
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
-> Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS — note the stale
-> duplicate `0002_rls_policies.sql` should be removed), `0003_seeker_availability_and_matching.sql`.
-> **The v1 decisions below require new migrations** (`0004+`): contact columns, the precise
-> time-range availability redesign, the 6-value education enum, the expanded language set,
-> per-child tables, and the reworked matching RPC. These are flagged **TODO (migration)** inline.
+> Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed.) **Done:** 0004 (contact columns), 0005 (6-value education enum).
+> **Still to write** (`0006+`): the precise time-range availability redesign, the expanded language set +
+> `tutor_languages`, per-child tables, and the reworked matching RPC. These are flagged **TODO (migration)** inline.
 
 ### 4.1 Auth & Core Profiles
 
@@ -113,9 +113,9 @@ budget_max_per_hour     int     HKD
 preferred_languages     text[]  expanded language set (see §4.2a)
 preferred_districts     text[]  array of district enums (see §4.10)
 ```
-> **TODO (migration):** `school_level` enum expands from 4 → **6** values
-> (add `kindergarten`, `middle`, `high`; `secondary` is superseded by `middle`+`high`).
-> Add `preferred_languages` / `preferred_districts`.
+> **DONE (migration 0005):** `school_level` rebuilt to the 6 values
+> (`kindergarten`, `primary`, `middle`, `high`, `university`, `adult`); legacy `secondary` removed (mapped to `middle`).
+> **TODO (migration):** add `preferred_languages` / `preferred_districts`.
 
 **`parent_profiles`** — one-to-one with profiles where role = 'parent'
 ```
@@ -156,7 +156,7 @@ is_published        bool   default false       (stays false until tutor explicit
 created_at          timestamptz
 updated_at          timestamptz
 ```
-> **TODO (migration 0004):** add `instagram_handle`, `wechat_id`. Tutor teaching
+> **DONE (migration 0004):** added `instagram_handle`, `wechat_id` (wired into `POST`/`PATCH`/`GET /api/tutors/[slug]`). Tutor teaching
 > languages + proficiency are stored separately — **TODO (migration):** add a
 > `tutor_languages` table `(tutor_id, language, proficiency 1..4)` (the onboarding
 > "proficiency" UI has no home today).
@@ -427,8 +427,8 @@ GET   /api/tutors/[slug]   [v1]   single tutor (public; includes posts)
 POST  /api/tutors          [v1]   create tutor profile (is_published defaults false)  [auth, role=tutor]
 PATCH /api/tutors/[slug]   [v1]   update own profile, incl. is_published + new contact fields  [auth, owner]
 ```
-> **TODO:** extend `GET /api/tutors` filters and `POST`/`PATCH` bodies to the full v1 set
-> (instagram_handle, wechat_id, languages, districts, etc.).
+> **DONE:** `instagram_handle` / `wechat_id` wired into `POST`/`PATCH` bodies and `GET /api/tutors/[slug]` (migration 0004).
+> **TODO:** extend `GET /api/tutors` browse filters and bodies to the remaining v1 set (languages, districts, etc.).
 
 ### Home Feed
 ```
