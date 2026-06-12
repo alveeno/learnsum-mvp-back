@@ -8,6 +8,41 @@ const PAGE_SIZE = 10
 const VALID_POST_TYPES = ['update', 'showcase', 'result'] as const
 type PostType = (typeof VALID_POST_TYPES)[number]
 
+const VALID_MEDIA_TYPES = new Set(['image', 'video'])
+const MAX_MEDIA_PER_POST = 10
+// Only accept media URLs that live in our own public Storage bucket (from /api/upload).
+const MEDIA_URL_PREFIX = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}/storage/v1/object/public/media/`
+
+type MediaInput = { url: string; media_type: string; sort_order: number }
+
+// Validates the optional `media` array on post creation. Missing/null → []. URLs
+// must point at our media bucket; media_type must be image|video; sort_order
+// defaults to the array index.
+function validateMedia(value: unknown): { rows: MediaInput[] } | { error: string } {
+  if (value === undefined || value === null) return { rows: [] }
+  if (!Array.isArray(value)) return { error: 'media must be an array of { url, media_type, sort_order? }' }
+  if (value.length > MAX_MEDIA_PER_POST) return { error: `a post can have at most ${MAX_MEDIA_PER_POST} media items` }
+
+  const rows: MediaInput[] = []
+  for (let i = 0; i < value.length; i++) {
+    const m = value[i]
+    if (typeof m !== 'object' || m === null) return { error: 'each media item must be an object' }
+    const { url, media_type, sort_order } = m as { url?: unknown; media_type?: unknown; sort_order?: unknown }
+    if (typeof url !== 'string' || MEDIA_URL_PREFIX === '/storage/v1/object/public/media/' || !url.startsWith(MEDIA_URL_PREFIX)) {
+      return { error: 'each media url must be a file uploaded to the media bucket (via POST /api/upload)' }
+    }
+    if (typeof media_type !== 'string' || !VALID_MEDIA_TYPES.has(media_type)) {
+      return { error: "each media item needs media_type 'image' or 'video'" }
+    }
+    const so = sort_order === undefined ? i : sort_order
+    if (!Number.isInteger(so) || (so as number) < 0) {
+      return { error: 'sort_order must be a non-negative integer' }
+    }
+    rows.push({ url, media_type, sort_order: so as number })
+  }
+  return { rows }
+}
+
 // ---------------------------------------------------------------------------
 // Shared helper — resolves slug or UUID to a tutor_profiles row.
 // RLS applies: unauthenticated callers only see is_published = true rows;
@@ -176,6 +211,12 @@ export async function POST(
     )
   }
 
+  // Validate optional media before creating the post.
+  const mediaResult = validateMedia((body as { media?: unknown }).media)
+  if ('error' in mediaResult) {
+    return NextResponse.json({ error: mediaResult.error }, { status: 400 })
+  }
+
   // 5. Insert — RLS "posts: owner insert" enforces ownership at the DB layer too
   const { data: post, error: insertError } = await supabase
     .from('posts')
@@ -193,5 +234,28 @@ export async function POST(
     return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
 
-  return NextResponse.json({ post }, { status: 201 })
+  // 6. Attach media (post_media RLS "owner insert" enforced via post ownership).
+  let postMedia: Array<{ url: string; media_type: string; sort_order: number }> = []
+  if (mediaResult.rows.length) {
+    const mediaRows = mediaResult.rows.map((m) => ({
+      post_id: post.id,
+      url: m.url,
+      media_type: m.media_type,
+      sort_order: m.sort_order,
+    }))
+    const { data: inserted, error: mediaError } = await supabase
+      .from('post_media')
+      .insert(mediaRows)
+      .select('url, media_type, sort_order')
+
+    if (mediaError) {
+      // Roll back the post so we never leave a post that lost its media.
+      await supabase.from('posts').delete().eq('id', post.id)
+      console.error('[tutors/posts POST] Media insert error:', mediaError)
+      return NextResponse.json({ error: mediaError.message }, { status: 500 })
+    }
+    postMedia = (inserted ?? []).sort((a, b) => a.sort_order - b.sort_order)
+  }
+
+  return NextResponse.json({ post: { ...post, post_media: postMedia } }, { status: 201 })
 }

@@ -77,9 +77,9 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model).
-> **All v1 schema migrations are now written (0004–0010).**
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS).
+> **All v1 schema migrations are now written (0004–0011).**
 
 ### 4.1 Auth & Core Profiles
 
@@ -496,7 +496,8 @@ PUT   /api/availability    [v1]   full-replace caller's availability (role-route
 ### Posts
 ```
 GET    /api/tutors/[slug]/posts   [v1]  paginated, public
-POST   /api/tutors/[slug]/posts   [v1]  create post  [auth, owner]
+POST   /api/tutors/[slug]/posts   [v1]  create post  [auth, owner]; optional media: [{url, media_type, sort_order?}]
+                                        (url must be in the media bucket; writes post_media, rollback on failure)
 DELETE /api/posts/[id]            [v1]  delete own post  [auth, owner]; cascades media/likes/comments
 ```
 
@@ -514,7 +515,17 @@ POST  /api/conversations                    [dormant]
 GET   /api/conversations/[id]/messages      [dormant]
 POST  /api/conversations/[id]/messages      [dormant]
 (no notification / push endpoints — out of v1)
-(no /api/upload yet — Storage upload path is TODO for posts/avatars)
+```
+
+### Uploads (Storage)
+```
+POST  /api/upload          [v1]   body { kind: 'avatar'|'post', content_type } → returns a signed
+                                  upload URL + token + path + public_url. The app uploads bytes
+                                  directly to the public `media` bucket (no service-role key —
+                                  createSignedUploadUrl runs under the caller's session). Files go to
+                                  {auth.uid()}/{avatars|posts}/{uuid}.{ext}; bucket + owner-only write
+                                  RLS in migration 0011. Avatars wired via PATCH /api/profiles/me
+                                  (avatar_url); post media via POST /api/tutors/[slug]/posts (media[]).
 ```
 
 ---
