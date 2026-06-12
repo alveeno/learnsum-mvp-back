@@ -455,7 +455,7 @@ PUT   /api/availability    [v1]   full-replace caller's availability (role-route
 ```
 GET    /api/tutors/[slug]/posts   [v1]  paginated, public
 POST   /api/tutors/[slug]/posts   [v1]  create post  [auth, owner]
-DELETE /api/posts/[id]            [todo]
+DELETE /api/posts/[id]            [v1]  delete own post  [auth, owner]; cascades media/likes/comments
 ```
 
 ### Saved Filters

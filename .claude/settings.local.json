@@ -41,7 +41,8 @@
       "Bash(node -e \"console.log\\(require\\('next/package.json'\\).version\\)\")",
       "Skill(claude-api)",
       "Bash(python3 -c ' *)",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('count:', len\\(d.get\\('tutors',[]\\)\\)\\); [print\\(t['slug'], '|', t.get\\('display_name'\\)\\) for t in d.get\\('tutors',[]\\)[:10]]\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('count:', len\\(d.get\\('tutors',[]\\)\\)\\); [print\\(t['slug'], '|', t.get\\('display_name'\\)\\) for t in d.get\\('tutors',[]\\)[:10]]\")",
+      "Bash(grep -nA2 -i \"posts\" supabase/migrations/0002_rls.sql)"
     ]
   }
 }
