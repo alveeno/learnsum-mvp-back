@@ -440,6 +440,21 @@ DELETE /api/children/[id]  [v1]   delete child; clears the child's availability 
 > lowercase languages). A child's **schedule** is managed via `PUT /api/availability` with a
 > `child_id` (single source of truth). Non-parent roles → 403; another parent's child → 404.
 
+### Tutor subjects & languages (tutor-only, full-replace)
+```
+GET   /api/tutor/languages [v1]   the tutor's teaching languages [{language, proficiency 1..4}]
+PUT   /api/tutor/languages [v1]   full-replace; body { languages: [{language, proficiency?}] | {lang:prof} }
+GET   /api/tutor/subjects  [v1]   the tutor's subjects (+ subcategory info)
+PUT   /api/tutor/subjects  [v1]   full-replace; body { subjects: [{subcategory_id, years_experience,
+                                  hourly_rate_min, hourly_rate_max, achievements, qualifications,
+                                  exam_results}] }; deduped by subcategory_id (last wins)
+```
+> Closes the post-onboarding gap (nothing edited `tutor_subcategories` / `tutor_languages`
+> after onboarding). `PUT subjects` verifies every `subcategory_id` exists **before** the
+> delete (full-replace is delete+insert) so a bad id can't wipe existing subjects. Non-tutor
+> roles → 403; no tutor profile yet → 409. Tutor profile/contacts/publish stay on
+> `PATCH /api/tutors/[slug]`; availability on `PUT /api/availability`.
+
 > **Profile editing (v1):** all roles edit their onboarding preferences from the profile
 > screen. Tutors edit profile picture, bio, WhatsApp/Instagram/WeChat, categories,
 > availability, rates, districts, languages, and `is_published` (self-publish/unpublish).

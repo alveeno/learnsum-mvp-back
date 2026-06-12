@@ -45,7 +45,9 @@
       "Bash(grep -nA2 -i \"posts\" supabase/migrations/0002_rls.sql)",
       "Bash(sed -n '/CREATE TABLE profiles/,/\\);/p' supabase/migrations/0001_initial_schema.sql)",
       "Bash(sed -n '/CREATE TABLE student_profiles/,/\\);/p' supabase/migrations/0001_initial_schema.sql)",
-      "Bash(sed -n '/CREATE TABLE parent_profiles/,/\\);/p' supabase/migrations/0001_initial_schema.sql)"
+      "Bash(sed -n '/CREATE TABLE parent_profiles/,/\\);/p' supabase/migrations/0001_initial_schema.sql)",
+      "Bash(sed -n '/CREATE TABLE tutor_subcategories/,/\\);/p' supabase/migrations/0001_initial_schema.sql)",
+      "Bash(grep -nA3 \"tutor_subcategories\" supabase/migrations/0002_rls.sql)"
     ]
   }
 }
