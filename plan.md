@@ -431,6 +431,7 @@ POST  /api/tutors          [v1]   create tutor profile (is_published defaults fa
 PATCH /api/tutors/[slug]   [v1]   update own profile, incl. is_published + new contact fields  [auth, owner]
 ```
 > **DONE:** `instagram_handle` / `wechat_id` wired into `POST`/`PATCH` bodies and `GET /api/tutors/[slug]` (migration 0004).
+> **DONE:** `GET /api/tutors/[slug]` also returns per-subject `achievements` / `qualifications` / `exam_results` (jsonb) and the tutor's `tutor_languages` (`language` + `proficiency`).
 > **TODO:** extend `GET /api/tutors` browse filters and bodies to the remaining v1 set (languages, districts, etc.).
 
 ### Home Feed

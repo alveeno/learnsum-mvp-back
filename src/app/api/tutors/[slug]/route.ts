@@ -55,6 +55,9 @@ export async function GET(
         years_experience,
         hourly_rate_min,
         hourly_rate_max,
+        achievements,
+        qualifications,
+        exam_results,
         subcategories (
           id,
           name_en,
@@ -67,6 +70,10 @@ export async function GET(
             slug
           )
         )
+      ),
+      tutor_languages (
+        language,
+        proficiency
       )
     `
     )
