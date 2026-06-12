@@ -14,32 +14,40 @@ const VALID_DISTRICTS = new Set([
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
 const VALID_TYPES = new Set(['individual', 'group', 'both'])
 const VALID_DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
-const VALID_SLOTS = new Set(['morning', 'afternoon', 'evening'])
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-// Validates availability jsonb shape: { [day]: string[] }
-// Example: { "mon": ["morning", "evening"], "sat": ["afternoon"] }
+// Validates availability jsonb in the precise minute-range shape (matches
+// /api/availability and the matching engine, §4.3): { [day]: [{ start, end }] },
+// minutes from midnight, 0 ≤ start < end ≤ 1440. null clears the saved value.
+// Example: { "mon": [{ "start": 540, "end": 720 }], "sat": [{ "start": 600, "end": 840 }] }
 function validateAvailability(value: unknown): string | null {
   if (value === null || value === undefined) return null
 
   if (typeof value !== 'object' || Array.isArray(value)) {
-    return 'availability must be an object'
+    return 'availability must be an object of the form { "mon": [{ "start": 540, "end": 720 }], ... }'
   }
 
-  for (const [day, slots] of Object.entries(value as Record<string, unknown>)) {
+  for (const [day, ranges] of Object.entries(value as Record<string, unknown>)) {
     if (!VALID_DAYS.has(day)) {
       return `availability key "${day}" is invalid — must be one of: ${[...VALID_DAYS].join(', ')}`
     }
 
-    if (!Array.isArray(slots)) {
-      return `availability["${day}"] must be an array of time slots`
+    if (!Array.isArray(ranges)) {
+      return `availability["${day}"] must be an array of { start, end } ranges`
     }
 
-    for (const slot of slots) {
-      if (!VALID_SLOTS.has(slot)) {
-        return `availability["${day}"] contains invalid slot "${slot}" — must be one of: ${[...VALID_SLOTS].join(', ')}`
+    for (const r of ranges) {
+      if (typeof r !== 'object' || r === null || Array.isArray(r)) {
+        return `availability["${day}"] entries must be { start, end } objects (minutes from midnight)`
+      }
+      const { start, end } = r as { start?: unknown; end?: unknown }
+      if (!Number.isInteger(start) || !Number.isInteger(end)) {
+        return `availability["${day}"] start/end must be whole numbers (minutes from midnight)`
+      }
+      if ((start as number) < 0 || (end as number) > 1440 || (start as number) >= (end as number)) {
+        return `availability["${day}"] needs 0 ≤ start < end ≤ 1440`
       }
     }
   }
@@ -122,7 +130,7 @@ export async function PUT(request: Request) {
     subcategory_ids?: string[]
     price_min?: number
     price_max?: number
-    availability?: Record<string, string[]>
+    availability?: Record<string, { start: number; end: number }[]>
   }
 
   // --- Validate ---

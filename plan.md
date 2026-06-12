@@ -350,7 +350,9 @@ saved_filter_preferences
   updated_at        timestamptz
 ```
 > Surfaced via the **Quick Match** card on the home screen. `GET`/`PUT /api/filters` are
-> built. **TODO:** align the `availability` jsonb shape with the precise-range redesign (§4.3).
+> built. **DONE:** the `availability` jsonb now uses the precise minute-range shape
+> `{ [day]: [{ start, end }] }` (§4.3) — matching `/api/availability` and the matching engine;
+> the old morning/afternoon/evening bucket shape is rejected. `null` clears the saved value.
 
 ### 4.10 HK Districts Enum (18 districts)
 ```
