@@ -391,7 +391,10 @@ Legend: **[v1]** built/active · **[dormant]** exists but out of v1 · **[todo]*
 POST  /api/auth/signup     [v1]  email + password + role; creates auth user (trigger makes profiles row)
 POST  /api/auth/login      [v1]
 POST  /api/auth/logout     [v1]
-GET   /api/auth/me         [v1]  returns { user, profile }
+GET   /api/auth/me         [v1]  returns { user, profile, detail } — detail is the role's
+                                  editable data (student → student_profile + interest ids;
+                                  parent → parent_profile + children w/ interests;
+                                  tutor → tutor_profile + subjects + languages)
 ```
 > **Email verification is OFF** in Supabase Auth, so `signup` returns a live session and
 > the app can immediately write onboarding data under the new user (Option A, §9). No
@@ -413,15 +416,23 @@ POST  /api/onboarding      [v1]   one-shot: after signup, write all collected on
 
 ### Profiles & editing
 ```
-GET   /api/profiles/me     [todo]  (currently only PATCH exists; GET lives at /api/auth/me)
-PATCH /api/profiles/me     [v1]    display_name + (TODO: role-specific preference fields)
+GET   /api/profiles/me     [v1]    lives at /api/auth/me (returns { user, profile, detail })
+PATCH /api/profiles/me     [v1]    role-routed: common profiles fields (display_name, full_name,
+                                   age, gender, avatar_url, district, preferred_language) for any
+                                   role; student block (school_level, format/type, budget,
+                                   preferred_languages[], preferred_districts[], interest ids
+                                   full-replace); parent block (searching_for_self). Tutors edit
+                                   profile via PATCH /api/tutors/[slug] + subjects/languages
+                                   endpoints; a student/parent block on a tutor → 400.
 DELETE /api/profiles/me    [todo]  delete own account (all three roles)
 ```
 > **Profile editing (v1):** all roles edit their onboarding preferences from the profile
 > screen. Tutors edit profile picture, bio, WhatsApp/Instagram/WeChat, categories,
 > availability, rates, districts, languages, and `is_published` (self-publish/unpublish).
-> Students/parents edit any onboarding preference. **TODO:** extend `PATCH /api/profiles/me`
-> (and the tutor/child endpoints) to cover all editable fields.
+> Students/parents edit any onboarding preference. **DONE:** `PATCH /api/profiles/me` covers
+> common profile fields + the student/parent preference blocks (incl. student interest replace);
+> `GET /api/auth/me` returns the role's current detail for pre-fill. Children CRUD + tutor
+> subjects/languages editing tracked separately (children + tutor-subjects/languages endpoints).
 
 ### Tutors / browse
 ```

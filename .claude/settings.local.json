@@ -42,7 +42,10 @@
       "Skill(claude-api)",
       "Bash(python3 -c ' *)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('count:', len\\(d.get\\('tutors',[]\\)\\)\\); [print\\(t['slug'], '|', t.get\\('display_name'\\)\\) for t in d.get\\('tutors',[]\\)[:10]]\")",
-      "Bash(grep -nA2 -i \"posts\" supabase/migrations/0002_rls.sql)"
+      "Bash(grep -nA2 -i \"posts\" supabase/migrations/0002_rls.sql)",
+      "Bash(sed -n '/CREATE TABLE profiles/,/\\);/p' supabase/migrations/0001_initial_schema.sql)",
+      "Bash(sed -n '/CREATE TABLE student_profiles/,/\\);/p' supabase/migrations/0001_initial_schema.sql)",
+      "Bash(sed -n '/CREATE TABLE parent_profiles/,/\\);/p' supabase/migrations/0001_initial_schema.sql)"
     ]
   }
 }
