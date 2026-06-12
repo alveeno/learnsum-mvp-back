@@ -426,6 +426,20 @@ PATCH /api/profiles/me     [v1]    role-routed: common profiles fields (display_
                                    endpoints; a student/parent block on a tutor → 400.
 DELETE /api/profiles/me    [todo]  delete own account (all three roles)
 ```
+
+### Children (parent-only)
+```
+GET    /api/children       [v1]   list the parent's children (each with interest ids)  [auth, parent]
+POST   /api/children       [v1]   add a child (name + optional prefs/interests); enforces ≤6  [auth, parent]
+GET    /api/children/[id]  [v1]   one child (with interest ids)  [auth, owner]
+PATCH  /api/children/[id]  [v1]   edit any subset; interests full-replace if sent  [auth, owner]
+DELETE /api/children/[id]  [v1]   delete child; clears the child's availability rows first
+                                  (polymorphic owner_id, no FK), then deletes (interests cascade)
+```
+> Same canonical input forms as `PATCH /api/profiles/me` (interest UUIDs, district enum codes,
+> lowercase languages). A child's **schedule** is managed via `PUT /api/availability` with a
+> `child_id` (single source of truth). Non-parent roles → 403; another parent's child → 404.
+
 > **Profile editing (v1):** all roles edit their onboarding preferences from the profile
 > screen. Tutors edit profile picture, bio, WhatsApp/Instagram/WeChat, categories,
 > availability, rates, districts, languages, and `is_published` (self-publish/unpublish).
