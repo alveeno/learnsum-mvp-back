@@ -77,9 +77,9 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS).
-> **All v1 schema migrations are now written (0004–0011).**
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`, `0012_oauth_role_default.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS), 0012 (OAuth-tolerant new-user trigger).
+> **All v1 schema migrations are now written (0004–0012).**
 
 ### 4.1 Auth & Core Profiles
 
@@ -393,6 +393,12 @@ Legend: **[v1]** built/active · **[dormant]** exists but out of v1 · **[todo]*
 POST  /api/auth/signup     [v1]  email + password + role; creates auth user (trigger makes profiles row)
 POST  /api/auth/login      [v1]
 POST  /api/auth/logout     [v1]
+POST  /api/auth/oauth      [v1]  start social sign-in (JSON): { provider: google|microsoft|apple,
+                                 role?, redirect_to? } → { url } (provider authorization URL)
+GET   /api/auth/oauth      [v1]  same, browser entry: ?provider=&role=&redirect_to= → 302 to provider
+GET   /api/auth/callback   [v1]  OAuth redirect target: exchanges ?code= for a session, assigns the
+                                 chosen role to a NEW account (while onboarding_done=false), then
+                                 redirects to ?next= (deep link) or returns { ok, user }
 GET   /api/auth/me         [v1]  returns { user, profile, detail } — detail is the role's
                                   editable data (student → student_profile + interest ids;
                                   parent → parent_profile + children w/ interests;
@@ -401,8 +407,12 @@ GET   /api/auth/me         [v1]  returns { user, profile, detail } — detail is
 > **Email verification is OFF** in Supabase Auth, so `signup` returns a live session and
 > the app can immediately write onboarding data under the new user (Option A, §9). No
 > service-role key is required for that path.
-> **Social login (Google / Apple / Microsoft) is in v1.** **TODO:** add OAuth sign-in
-> (Supabase OAuth providers) to back the social buttons in the login sheet.
+> **Social login (Google / Apple / Microsoft) is in v1.** **DONE:** backend-mediated OAuth via
+> `POST`/`GET /api/auth/oauth` (initiate) + `GET /api/auth/callback` (code exchange + role assignment).
+> Migration `0012` makes the new-user trigger tolerant of OAuth's missing role (defaults to `student`;
+> the callback writes the real chosen role while `onboarding_done` is false). Providers are enabled +
+> client id/secret configured in the Supabase dashboard (operator step), and the callback URL is added
+> to the Supabase Auth redirect allowlist. Microsoft maps to Supabase's `azure` provider.
 
 ### Onboarding write (Option A) — **TODO**
 ```
