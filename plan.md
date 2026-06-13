@@ -398,7 +398,10 @@ POST  /api/auth/oauth      [v1]  start social sign-in (JSON): { provider: google
 GET   /api/auth/oauth      [v1]  same, browser entry: ?provider=&role=&redirect_to= → 302 to provider
 GET   /api/auth/callback   [v1]  OAuth redirect target: exchanges ?code= for a session, assigns the
                                  chosen role to a NEW account (while onboarding_done=false), then
-                                 redirects to ?next= (deep link) or returns { ok, user }
+                                 redirects to ?next= or returns { ok, user }. `next` is allowlist-
+                                 validated (same-origin + OAUTH_REDIRECT_ALLOWLIST prefixes) to
+                                 prevent an open redirect; set OAUTH_REDIRECT_ALLOWLIST to the app
+                                 deep-link scheme + web origin (e.g. "learnsum://,https://app...").
 GET   /api/auth/me         [v1]  returns { user, profile, detail } — detail is the role's
                                   editable data (student → student_profile + interest ids;
                                   parent → parent_profile + children w/ interests;
@@ -412,7 +415,10 @@ GET   /api/auth/me         [v1]  returns { user, profile, detail } — detail is
 > Migration `0012` makes the new-user trigger tolerant of OAuth's missing role (defaults to `student`;
 > the callback writes the real chosen role while `onboarding_done` is false). Providers are enabled +
 > client id/secret configured in the Supabase dashboard (operator step), and the callback URL is added
-> to the Supabase Auth redirect allowlist. Microsoft maps to Supabase's `azure` provider.
+> to the Supabase Auth redirect allowlist. Microsoft maps to Supabase's `azure` provider. The callback's
+> `next` redirect is **allowlist-validated against open redirects** (same-origin + the comma-separated
+> **`OAUTH_REDIRECT_ALLOWLIST`** env prefixes); set that env to the app deep-link scheme + web origin
+> when wiring the frontend.
 
 ### Onboarding write (Option A) — **TODO**
 ```
@@ -541,6 +547,18 @@ POST  /api/upload          [v1]   body { kind: 'avatar'|'post', content_type } �
                                   RLS in migration 0011. Avatars wired via PATCH /api/profiles/me
                                   (avatar_url); post media via POST /api/tutors/[slug]/posts (media[]).
 ```
+
+### Hardening follow-ups (from code review — not v1 blockers)
+- **OAuth open redirect — FIXED:** `GET /api/auth/callback` allowlist-validates `next` (same-origin +
+  `OAUTH_REDIRECT_ALLOWLIST`); off-origin / protocol-relative targets are rejected.
+- **`avatar_url` (TODO):** `PATCH /api/profiles/me` accepts any URL; consider validating it to the
+  media-bucket prefix like post media does (prevents storing arbitrary external image URLs).
+- **`saved_filter_preferences.preferred_langs` (TODO):** still validates against the legacy 3-language
+  enum; align to the expanded lowercase-token set (§4.2a / 0010) for consistency with seeker prefs.
+- **Atomicity (TODO):** the multi-step edit writes (profile / children / tutor subjects+languages) aren't
+  transactional; fold into SQL functions if airtightness is needed (low-value data today).
+- **Tests (TODO):** no automated suite — verification is live `curl`. Add an integration harness before
+  the frontend depends on these contracts.
 
 ---
 

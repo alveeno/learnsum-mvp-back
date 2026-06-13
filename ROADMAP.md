@@ -56,6 +56,14 @@ Always begin with:
 
 Update this section as you complete each step.
 
+> **Backend v1 endpoints: COMPLETE** (all built, tested live, committed on `main`; migrations
+> `0004`–`0013` applied to live Supabase). Covers auth + **social login** (Google/Microsoft/Apple),
+> one-shot onboarding, tutor browse/profile/posts, categories, precise-range availability,
+> the weighted matching feed, saved filters, **file uploads** (avatars/post media), full
+> profile/preference editing, **parent children CRUD**, tutor subjects/languages editing, and
+> **self-service account deletion**. See `plan.md §5` + `CLAUDE.md` for the authoritative endpoint
+> list. Remaining work is the **Expo frontend** (Phase 3, in `learnsum-mvp-expo-app`).
+
 - [x] Setup — Agents installed, project folder created
 - [x] Phase 1, Step 1 — App described to Rapid Prototyper, 3 core features confirmed
 - [x] Phase 1, Step 2 — Backend Architect produced schema and API structure, saved to PLAN.md
@@ -277,9 +285,10 @@ In GitHub Desktop:
 
 ### Security
 - `.env.local` is in `.gitignore` — never commit credentials
-- `SUPABASE_SERVICE_ROLE_KEY` only in server-side files, never client-side
+- `SUPABASE_SERVICE_ROLE_KEY` only in server-side files, never client-side (note: this project has **no** service-role key — elevated DB actions go through `SECURITY DEFINER` SQL functions instead)
 - `NEXT_PUBLIC_` prefix only for the anon key, never for the service role key
-- RLS policies applied to all tables via 0002_rls.sql
+- RLS policies applied to all tables via 0002_rls.sql (+ later migrations); Storage `media` bucket has owner-only write / public read (0011)
+- **`OAUTH_REDIRECT_ALLOWLIST`** (optional env) — comma-separated trusted redirect prefixes for the OAuth callback's `next` param (e.g. `learnsum://,https://app.learnsum.com`). Same-origin is always allowed; everything else is rejected to prevent an **open redirect**. Set it to the Expo deep-link scheme + production web origin when wiring the frontend.
 
 ### Database
 - All UUIDs use `gen_random_uuid()` not `uuid_generate_v4()`

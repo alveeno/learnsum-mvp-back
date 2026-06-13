@@ -51,7 +51,8 @@
       "Bash(cd /Users/alveeno/.claude/projects/-Users-alveeno-Documents-GitHub-learnsum-mvp-back/memory)",
       "Bash(rm -f matching-migration-pending.md)",
       "Read(//tmp/**)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Bash(gh pr *)"
     ]
   }
 }
