@@ -77,9 +77,9 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`, `0012_oauth_role_default.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS), 0012 (OAuth-tolerant new-user trigger).
-> **All v1 schema migrations are now written (0004–0012).**
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`, `0012_oauth_role_default.sql`, `0013_delete_own_account.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS), 0012 (OAuth-tolerant new-user trigger), 0013 (self-service account deletion).
+> **All v1 schema migrations are now written (0004–0013).**
 
 ### 4.1 Auth & Core Profiles
 
@@ -436,7 +436,11 @@ PATCH /api/profiles/me     [v1]    role-routed: common profiles fields (display_
                                    full-replace); parent block (searching_for_self). Tutors edit
                                    profile via PATCH /api/tutors/[slug] + subjects/languages
                                    endpoints; a student/parent block on a tutor → 400.
-DELETE /api/profiles/me    [todo]  delete own account (all three roles)
+DELETE /api/profiles/me    [v1]    permanently delete own account (all roles). Purges the user's
+                                   media via the Storage API, then runs the SECURITY DEFINER
+                                   delete_own_account() (migration 0013): deletes the auth user
+                                   (cascades all data) + non-cascading seeker_availability rows;
+                                   clears the session. No service-role key needed.
 ```
 
 ### Children (parent-only)

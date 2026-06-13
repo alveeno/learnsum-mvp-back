@@ -283,3 +283,51 @@ export async function PATCH(request: Request) {
     ...(newInterestIds !== undefined ? { interest_subcategory_ids: newInterestIds } : {}),
   })
 }
+
+// ---------------------------------------------------------------------------
+// DELETE /api/profiles/me — permanently delete the caller's own account.
+// First purges the user's Storage files via the Storage API (Postgres forbids a
+// direct DELETE on storage.objects), then runs the SECURITY DEFINER
+// delete_own_account() function (migration 0013), which removes the auth user
+// (cascading all their data) + the non-cascading seeker_availability rows.
+// Finally clears the session cookies.
+// ---------------------------------------------------------------------------
+export async function DELETE() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
+  // Best-effort: remove the user's uploaded media (owner-delete RLS lets them
+  // remove their own {user.id}/... files). Errors here don't block deletion.
+  for (const folder of ['avatars', 'posts'] as const) {
+    const { data: files } = await supabase.storage.from('media').list(`${user.id}/${folder}`, { limit: 1000 })
+    const paths = (files ?? []).map((f) => `${user.id}/${folder}/${f.name}`)
+    if (paths.length) {
+      await supabase.storage.from('media').remove(paths)
+    }
+  }
+
+  const { error: rpcError } = await supabase.rpc('delete_own_account')
+  if (rpcError) {
+    // PGRST202 = function not found in schema cache → migration not applied
+    if (rpcError.code === 'PGRST202') {
+      return NextResponse.json(
+        { error: 'Account deletion not installed — apply migration 0013' },
+        { status: 503 }
+      )
+    }
+    console.error('[profiles/me DELETE] rpc error:', rpcError)
+    return NextResponse.json({ error: rpcError.message }, { status: 500 })
+  }
+
+  // The user no longer exists; clear the auth cookies (best-effort).
+  await supabase.auth.signOut().catch(() => {})
+
+  return NextResponse.json({ ok: true })
+}
