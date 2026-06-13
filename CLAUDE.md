@@ -124,6 +124,7 @@ avail:      Record<"mon".."sun", { start: number, end: number }[]>  // MINUTES f
 
 ### API response shapes the frontend expects
 **As of now, no onboarding/feed/login screen is wired to the backend** — the feed and login are placeholders. So the only live contracts are what the backend already returns; build the frontend against these:
+- **Auth from the app:** send the user's Supabase `access_token` as `Authorization: Bearer <token>` on every request (React Native cookie handling is unreliable). The backend also accepts the web cookie session; RLS is enforced under the token either way. (`src/lib/supabase/server.ts`)
 - `GET /api/feed` → `{ feed: [{ slug, bio, created_at, display_name, avatar_url, district, categories: [{id,name_en,name_zh,slug}], score? }], personalized: bool, pagination: { page, page_size, total, has_more } }`
 - `GET /api/tutors` → `{ tutors: [ same card shape minus score ], pagination }`
 - `GET /api/tutors/[slug]` → `{ tutor: { ...profile, profiles{...}, tutor_subcategories[...], posts:[{...,post_media[]}] } }`

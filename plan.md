@@ -415,7 +415,13 @@ GET   /api/auth/me         [v1]  returns { user, profile, detail } — detail is
 > Migration `0012` makes the new-user trigger tolerant of OAuth's missing role (defaults to `student`;
 > the callback writes the real chosen role while `onboarding_done` is false). Providers are enabled +
 > client id/secret configured in the Supabase dashboard (operator step), and the callback URL is added
-> to the Supabase Auth redirect allowlist. Microsoft maps to Supabase's `azure` provider. The callback's
+> to the Supabase Auth redirect allowlist. Microsoft maps to Supabase's `azure` provider.
+
+> **Auth transport (web + mobile):** protected endpoints accept **either** the session cookie
+> (web, set by `/api/auth/login`) **or** an `Authorization: Bearer <access_token>` header (the
+> robust path for Expo/React Native, where cookies are unreliable). With a Bearer token, the
+> server client runs every PostgREST/Storage query under that JWT so **RLS still resolves
+> `auth.uid()`** to the caller; `auth.getUser()` validates the token directly. (See `src/lib/supabase/server.ts`.) The callback's
 > `next` redirect is **allowlist-validated against open redirects** (same-origin + the comma-separated
 > **`OAUTH_REDIRECT_ALLOWLIST`** env prefixes); set that env to the app deep-link scheme + web origin
 > when wiring the frontend.
