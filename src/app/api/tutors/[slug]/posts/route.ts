@@ -10,15 +10,18 @@ type PostType = (typeof VALID_POST_TYPES)[number]
 
 const VALID_MEDIA_TYPES = new Set(['image', 'video'])
 const MAX_MEDIA_PER_POST = 10
-// Only accept media URLs that live in our own public Storage bucket (from /api/upload).
-const MEDIA_URL_PREFIX = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}/storage/v1/object/public/media/`
+// Base public URL of our Storage media bucket (empty if the env is unset).
+const MEDIA_BUCKET_PREFIX = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/media/`
+  : ''
 
 type MediaInput = { url: string; media_type: string; sort_order: number }
 
-// Validates the optional `media` array on post creation. Missing/null → []. URLs
-// must point at our media bucket; media_type must be image|video; sort_order
-// defaults to the array index.
-function validateMedia(value: unknown): { rows: MediaInput[] } | { error: string } {
+// Validates the optional `media` array on post creation. Missing/null → [].
+// URLs must be files the POSTER uploaded — i.e. under their own
+// "{ownerPrefix}" path ({bucket}/{tutor.id}/) — not just anywhere in the bucket.
+// media_type must be image|video; sort_order defaults to the array index.
+function validateMedia(value: unknown, ownerPrefix: string): { rows: MediaInput[] } | { error: string } {
   if (value === undefined || value === null) return { rows: [] }
   if (!Array.isArray(value)) return { error: 'media must be an array of { url, media_type, sort_order? }' }
   if (value.length > MAX_MEDIA_PER_POST) return { error: `a post can have at most ${MAX_MEDIA_PER_POST} media items` }
@@ -28,8 +31,8 @@ function validateMedia(value: unknown): { rows: MediaInput[] } | { error: string
     const m = value[i]
     if (typeof m !== 'object' || m === null) return { error: 'each media item must be an object' }
     const { url, media_type, sort_order } = m as { url?: unknown; media_type?: unknown; sort_order?: unknown }
-    if (typeof url !== 'string' || MEDIA_URL_PREFIX === '/storage/v1/object/public/media/' || !url.startsWith(MEDIA_URL_PREFIX)) {
-      return { error: 'each media url must be a file uploaded to the media bucket (via POST /api/upload)' }
+    if (typeof url !== 'string' || !ownerPrefix || !url.startsWith(ownerPrefix)) {
+      return { error: 'each media url must be a file you uploaded via POST /api/upload' }
     }
     if (typeof media_type !== 'string' || !VALID_MEDIA_TYPES.has(media_type)) {
       return { error: "each media item needs media_type 'image' or 'video'" }
@@ -211,8 +214,10 @@ export async function POST(
     )
   }
 
-  // Validate optional media before creating the post.
-  const mediaResult = validateMedia((body as { media?: unknown }).media)
+  // Validate optional media before creating the post — URLs must be the tutor's
+  // own uploaded files ({bucket}/{tutor.id}/...).
+  const ownerPrefix = MEDIA_BUCKET_PREFIX ? `${MEDIA_BUCKET_PREFIX}${tutor.id}/` : ''
+  const mediaResult = validateMedia((body as { media?: unknown }).media, ownerPrefix)
   if ('error' in mediaResult) {
     return NextResponse.json({ error: mediaResult.error }, { status: 400 })
   }

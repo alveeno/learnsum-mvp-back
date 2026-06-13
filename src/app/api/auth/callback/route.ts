@@ -27,18 +27,44 @@ function redirectAllowlist(): string[] {
 
 // Validates the caller-supplied `next` to prevent an open redirect. Returns a
 // safe absolute target, or null (callers then fall back to a JSON response).
-// Allowed: same-origin relative paths, the request's own origin, and any prefix
-// in OAUTH_REDIRECT_ALLOWLIST. Rejects protocol-relative ("//evil") and other
-// off-origin targets.
+// Allowed: same-origin relative paths, the request's own origin, and any entry
+// in OAUTH_REDIRECT_ALLOWLIST — matched by PARSED ORIGIN (http/https) or by
+// SCHEME (custom deep-link schemes like "learnsum://"). String prefix matching
+// is deliberately avoided: "https://trusted.com@evil.com" and
+// "https://trusted.com.evil.com" must NOT be treated as trusted.
 function safeRedirect(next: string | null, origin: string): string | null {
   if (!next) return null
+
   // Same-origin relative path — reject "//evil.com" and "/\evil.com" tricks.
-  if (next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\')) {
+  if (next.startsWith('/')) {
+    if (next.startsWith('//') || next.startsWith('/\\')) return null
     return origin + next
   }
-  const allowed = [origin, ...redirectAllowlist()]
-  if (allowed.some((prefix) => prefix.length > 0 && next.startsWith(prefix))) {
-    return next
+
+  // Absolute target — must parse and match an allowed origin or trusted scheme.
+  let parsed: URL
+  try {
+    parsed = new URL(next)
+  } catch {
+    return null
+  }
+
+  for (const entry of [origin, ...redirectAllowlist()]) {
+    if (!entry) continue
+    // Scheme-only entry (e.g. "learnsum://") trusts any URL with that scheme —
+    // the OS routes that scheme to our own app.
+    const scheme = entry.match(/^([a-z][a-z0-9+.-]*):\/\/$/i)
+    if (scheme) {
+      if (parsed.protocol === `${scheme[1].toLowerCase()}:`) return next
+      continue
+    }
+    // Otherwise treat the entry as an http(s) origin and compare parsed origins.
+    try {
+      const allowedOrigin = new URL(entry).origin
+      if (allowedOrigin !== 'null' && parsed.origin === allowedOrigin) return next
+    } catch {
+      // ignore a malformed allowlist entry
+    }
   }
   return null
 }

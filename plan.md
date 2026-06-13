@@ -549,8 +549,13 @@ POST  /api/upload          [v1]   body { kind: 'avatar'|'post', content_type } �
 ```
 
 ### Hardening follow-ups (from code review — not v1 blockers)
-- **OAuth open redirect — FIXED:** `GET /api/auth/callback` allowlist-validates `next` (same-origin +
-  `OAUTH_REDIRECT_ALLOWLIST`); off-origin / protocol-relative targets are rejected.
+- **OAuth open redirect — FIXED (hardened):** `GET /api/auth/callback` validates `next` by **parsed
+  origin** (http/https) or **scheme** (custom deep-links like `learnsum://`), against same-origin +
+  `OAUTH_REDIRECT_ALLOWLIST`. Earlier prefix (`startsWith`) matching was bypassable
+  (`https://trusted.com@evil.com`, `https://trusted.com.evil.com`); now rejected. Off-origin /
+  protocol-relative also rejected.
+- **Post media ownership — FIXED:** `POST /api/tutors/[slug]/posts` now requires each `media` url to be
+  under the poster's OWN bucket path (`…/media/{tutor.id}/`), not just anywhere in the bucket.
 - **`avatar_url` (TODO):** `PATCH /api/profiles/me` accepts any URL; consider validating it to the
   media-bucket prefix like post media does (prevents storing arbitrary external image URLs).
 - **`saved_filter_preferences.preferred_langs` (TODO):** still validates against the legacy 3-language
