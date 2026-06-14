@@ -139,6 +139,23 @@ avail:      Record<"mon".."sun", { start: number, end: number }[]>  // MINUTES f
 - `GET /api/auth/me` → `{ user, profile }`
 - `GET/PUT /api/filters`, `GET/PUT /api/availability` → see `plan.md §5`
 
+## Pending setup (not yet done — complete before testing phone auth)
+
+### Twilio + Supabase phone auth
+Phone OTP endpoints are built (`POST /api/auth/phone` + `POST /api/auth/phone/verify`) but will not send real SMS until the Supabase phone provider is wired up. Steps:
+
+1. Sign up at twilio.com → from the Console dashboard copy **Account SID** and **Auth Token**
+2. Buy a phone number with SMS capability (trial account gives one free number)
+3. In Supabase dashboard: **Authentication → Providers → Phone** → toggle ON → select **Twilio** → paste Account SID, Auth Token, and the Twilio phone number → Save
+4. Leave "Phone Confirm" OFF (consistent with email confirmation being off)
+5. Optional (avoids real SMS costs in dev): scroll down on the same page to **Test OTP Numbers** → add e.g. `+85200000001` with token `123456`
+
+Test once set up:
+```bash
+curl -s -X POST http://localhost:3000/api/auth/phone -H "Content-Type: application/json" -d '{"phone":"+85200000001","role":"student"}'
+curl -s -X POST http://localhost:3000/api/auth/phone/verify -H "Content-Type: application/json" -d '{"phone":"+85200000001","token":"123456","role":"student"}'
+```
+
 ### Naming / shape mismatches the write path must reconcile
 | Frontend (store) | Backend (column/enum) | Mismatch |
 |---|---|---|
