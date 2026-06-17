@@ -52,7 +52,10 @@
       "Bash(rm -f matching-migration-pending.md)",
       "Read(//tmp/**)",
       "Read(//private/tmp/**)",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "Bash(sed -n '1,40p')",
+      "Bash(git check-ignore *)",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('personalized:',d.get\\('personalized'\\)\\);print\\('feed items:',len\\(d.get\\('feed',[]\\)\\)\\);print\\('pagination:',d.get\\('pagination'\\)\\)\")"
     ]
   }
 }
