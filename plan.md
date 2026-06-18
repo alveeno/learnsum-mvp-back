@@ -7,7 +7,7 @@
 > them as canonical in all docs.)
 >
 > **This document is the source of truth for the backend schema + API.** It reflects
-> the v1 product decisions agreed for the current build. Where a decision implies
+> the product decisions agreed for the current build. Where a decision implies
 > schema/API work that is not yet written, it is called out inline with **TODO**.
 
 ## 1. Product Overview
@@ -24,11 +24,11 @@ Hong Kong-based two-sided tutoring marketplace with a social media layer.
 - Tutor profiles work like Instagram — bio block + scrollable post feed.
 - Two-way discovery — parents/students find tutors via a personalized, weighted feed.
 - **Contact is WhatsApp / Instagram / WeChat** (all optional, any combination). No
-  in-app inquiry form, no in-app chat in v1.
+  in-app inquiry form, no in-app chat yet (see TODO).
 
 ---
 
-## 2. Three Core Features (v1)
+## 2. Three Core Features
 
 **1. Tutor Social Profile** — supply-side value proposition
 Bio block: photo, display name, university, categories, pricing, personal description,
@@ -40,7 +40,7 @@ remaining details) where they explicitly publish. Tutors can later unpublish the
 
 **2. Public Browse + Full Filters + Personalized Feed** — demand-side discovery + SEO
 Public browse of published tutors. The home feed is **personalized by a weighted matching
-algorithm** for seekers (see §6). Filters in v1 are the **full saved-filter set**:
+algorithm** for seekers (see §6). Filters are the **full saved-filter set**:
 preferred languages, districts, tutoring format, tutoring type, subcategory, price
 min/max, and availability. Saved filter preferences are auth-gated and surfaced via a
 **Quick Match** card on the home screen.
@@ -53,7 +53,7 @@ profile page, **all configured contact buttons show simultaneously**:
 - **Instagram** → opens the tutor's Instagram profile.
 - **WeChat** → opens WeChat with the tutor's WeChat ID.
 
-No inquiry form and no backend booking logic in v1. (The `inquiries` table and its
+No inquiry form and no backend booking logic yet (see TODO). (The `inquiries` table and its
 endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 ---
@@ -65,11 +65,11 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 | Backend API | Next.js 16 (App Router) | API routes only — no frontend pages or UI in this repo. Dynamic route handlers must `await params` (Promise in Next 15+). |
 | Frontend | React Native + Expo (separate repo: `learnsum-mvp-expo-app`) | Mobile-first UI, separate from the API server |
 | Backend + DB | Supabase | Auth + Postgres + Storage |
-| Email | Resend (transactional) | **Not wired in v1** — email verification is OFF and notifications are out of scope; reserved for v1.1+ |
+| Email | Resend (transactional) | **Not wired yet** (see TODO) — email verification is OFF and notifications are not built |
 | Deploy | Vercel | API server only — zero-config, Next.js native |
 
-> **Out of the stack for v1:** Supabase Realtime / chat (v2), Expo Push / FCM (out — no
-> push notifications in v1).
+> **Not wired yet (see TODO):** Supabase Realtime / chat, Expo Push / FCM (no
+> push notifications built yet).
 
 ---
 
@@ -79,7 +79,7 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
 > `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`, `0012_oauth_role_default.sql`, `0013_delete_own_account.sql`. (The stale `0002_rls_policies.sql`
 > duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS), 0012 (OAuth-tolerant new-user trigger), 0013 (self-service account deletion).
-> **All v1 schema migrations are now written (0004–0013).**
+> **All schema migrations are now written (0004–0013).**
 
 ### 4.1 Auth & Core Profiles
 
@@ -96,7 +96,7 @@ onboarding_done     bool        default false
 created_at          timestamptz
 updated_at          timestamptz
 ```
-> **Changed for v1:** per-person *preferred languages* and *preferred districts* are now
+> **Changed:** per-person *preferred languages* and *preferred districts* are now
 > multi-valued and live on the seeker detail tables (below), not as single enums on
 > `profiles`. **TODO (migration):** drop/relax `profiles.preferred_language` and
 > `profiles.district` single-enum columns, or keep one as an optional "primary/home" value.
@@ -202,11 +202,11 @@ subcategory_id      uuid   FK → subcategories
 years_experience    int
 hourly_rate_min     int    HKD
 hourly_rate_max     int    HKD
-achievements        jsonb  {"en": "...", "zh": "..."}   — v1 (collected in onboarding)
-qualifications      jsonb  {"en": "...", "zh": "..."}   — v1 (collected in onboarding)
-exam_results        jsonb  {"en": "HKDSE Maths 5**", "zh": "..."} — v1
+achievements        jsonb  {"en": "...", "zh": "..."}   — collected in onboarding
+qualifications      jsonb  {"en": "...", "zh": "..."}   — collected in onboarding
+exam_results        jsonb  {"en": "HKDSE Maths 5**", "zh": "..."} — collected in onboarding
 ```
-> **Changed for v1:** `achievements` / `qualifications` / `exam_results` are now **v1**
+> **Changed:** `achievements` / `qualifications` / `exam_results` are now **collected in onboarding**
 > (the tutor "Strengths & Details" screen already collects them). The onboarding also
 > collects a free-text **"relevant experience"** list and a single **preferred pay**
 > figure per subject. **TODO (migration / mapping):** add a home for "experience"
@@ -226,7 +226,7 @@ from onboarding, not just three. Languages: `english`, `cantonese`, `mandarin`,
 
 ### 4.3 Availability (precise time ranges) — REDESIGNED
 
-v1 stores **precise start/end time ranges per weekday**, not coarse morning/afternoon/
+The current design stores **precise start/end time ranges per weekday**, not coarse morning/afternoon/
 evening buckets. The `time_slot` enum (`morning|afternoon|evening`) is **removed**.
 
 **`tutor_availability`**
@@ -254,7 +254,7 @@ end_min      int
 
 ---
 
-### 4.4 Social Posts (Tutor Feed) — v1
+### 4.4 Social Posts (Tutor Feed)
 
 **`posts`**
 ```
@@ -278,16 +278,16 @@ media_type  enum  'image' | 'video'
 sort_order  int
 ```
 
-**`post_likes`** / **`post_comments`** — schema only; **likes/comments UI is out of v1**
-(tables + triggers exist so the data model is ready; do not build the interaction UI).
+**`post_likes`** / **`post_comments`** — schema only; **likes/comments UI not built yet (see TODO)**
+(tables + triggers exist so the data model is ready).
 ```
 post_likes     (id, post_id, profile_id, created_at, UNIQUE(post_id, profile_id))
 post_comments  (id, post_id, profile_id, parent_comment_id, content, deleted_at, created_at)
 ```
 
-> **v1 scope:** tutors can **create posts** and the tutor profile shows a **scrollable
+> **Built:** tutors can **create posts** and the tutor profile shows a **scrollable
 > post feed** (bio at top, posts below, Instagram-style). Post creation + feed viewer are
-> built; likes/comments remain schema-only.
+> built; likes/comments remain schema-only (see TODO).
 
 #### §4.4a — Required counter triggers
 Created alongside the tables (already in `0001`). Without them the counts stay 0.
@@ -304,37 +304,37 @@ Created alongside the tables (already in `0001`). Without them the counts stay 0
 
 Three optional columns on `tutor_profiles` (§4.1): `whatsapp_number`, `instagram_handle`,
 `wechat_id`. All optional; any combination. The profile page renders every configured
-button. There is **no inquiry form** in v1.
+button. There is **no inquiry form** (see TODO).
 
 ### 4.6 Inquiries — DORMANT (kept in schema, not wired)
 ```
 inquiries (id, tutor_id, sender_profile_id, sender_name, sender_email, sender_phone,
            message, preferred_schedule, status 'new'|'read'|'replied', created_at)
 ```
-> The table and `POST /api/tutors/[slug]/inquiries` still exist but are **out of v1** —
-> do not build UI against them. Marked dormant for possible future use.
+> The table and `POST /api/tutors/[slug]/inquiries` exist but are **not built yet** —
+> no UI against them. Dormant; tracked in TODO.
 
-### 4.7 Chat & Messaging — DORMANT / v2 (kept in schema, not wired)
+### 4.7 Chat & Messaging — DORMANT (not built — see TODO)
 ```
 conversations (id, participant_a, participant_b, last_message_at, created_at,
                UNIQUE(participant_a, participant_b), CHECK (participant_a < participant_b))
 messages      (id, conversation_id, sender_id, content, is_read, created_at)
 ```
 > Canonical ordering: always insert the smaller UUID in `participant_a`. The
-> `/api/conversations*` endpoints exist but are **dormant** — chat is a planned v2 feature.
-> No real-time wiring in v1.
+> `/api/conversations*` endpoints exist but are **dormant** — chat is a TODO feature.
+> No real-time wiring yet.
 
-### 4.8 Notifications & Push — OUT OF v1 (dormant schema)
+### 4.8 Notifications & Push — NOT BUILT (see TODO; dormant schema)
 ```
 push_tokens   (id, profile_id, token, platform, created_at, UNIQUE(profile_id, token))
 notifications (id, recipient_id, type, title_en/zh, body_en/zh, data, is_read, push_sent, created_at)
 ```
-> **Fully out of v1:** no push tokens registered, no notifications written, no notification
-> endpoints. Tables remain but are unused.
+> **Not built yet (see TODO):** no push tokens registered, no notifications written, no
+> notification endpoints. Tables remain but are unused.
 
 ---
 
-### 4.9 Saved Filter Preferences — v1 (auth-gated)
+### 4.9 Saved Filter Preferences (auth-gated)
 ```
 saved_filter_preferences
   id                uuid        PK
@@ -386,23 +386,23 @@ KwaiTsing | TsuenWan | TuenMun | YuenLong | North | TaiPo | SaiKung | ShaTin | I
 
 ## 5. API Routes
 
-Legend: **[v1]** built/active · **[dormant]** exists but out of v1 · **[todo]** to build.
+Legend: **[built]** active · **[dormant]** code exists, switched off · **[todo]** not built yet.
 
 ### Auth
 ```
-POST  /api/auth/signup     [v1]  email + password + role; creates auth user (trigger makes profiles row)
-POST  /api/auth/login      [v1]
-POST  /api/auth/logout     [v1]
-POST  /api/auth/oauth      [v1]  start social sign-in (JSON): { provider: google|microsoft|apple,
+POST  /api/auth/signup     [built]  email + password + role; creates auth user (trigger makes profiles row)
+POST  /api/auth/login      [built]
+POST  /api/auth/logout     [built]
+POST  /api/auth/oauth      [built]  start social sign-in (JSON): { provider: google|microsoft|apple,
                                  role?, redirect_to? } → { url } (provider authorization URL)
-GET   /api/auth/oauth      [v1]  same, browser entry: ?provider=&role=&redirect_to= → 302 to provider
-GET   /api/auth/callback   [v1]  OAuth redirect target: exchanges ?code= for a session, assigns the
+GET   /api/auth/oauth      [built]  same, browser entry: ?provider=&role=&redirect_to= → 302 to provider
+GET   /api/auth/callback   [built]  OAuth redirect target: exchanges ?code= for a session, assigns the
                                  chosen role to a NEW account (while onboarding_done=false), then
                                  redirects to ?next= or returns { ok, user }. `next` is allowlist-
                                  validated (same-origin + OAUTH_REDIRECT_ALLOWLIST prefixes) to
                                  prevent an open redirect; set OAUTH_REDIRECT_ALLOWLIST to the app
                                  deep-link scheme + web origin (e.g. "learnsum://,https://app...").
-GET   /api/auth/me         [v1]  returns { user, profile, detail } — detail is the role's
+GET   /api/auth/me         [built]  returns { user, profile, detail } — detail is the role's
                                   editable data (student → student_profile + interest ids;
                                   parent → parent_profile + children w/ interests;
                                   tutor → tutor_profile + subjects + languages)
@@ -410,7 +410,7 @@ GET   /api/auth/me         [v1]  returns { user, profile, detail } — detail is
 > **Email verification is OFF** in Supabase Auth, so `signup` returns a live session and
 > the app can immediately write onboarding data under the new user (Option A, §9). No
 > service-role key is required for that path.
-> **Social login (Google / Apple / Microsoft) is in v1.** **DONE:** backend-mediated OAuth via
+> **Social login (Google / Apple / Microsoft) is built.** **DONE:** backend-mediated OAuth via
 > `POST`/`GET /api/auth/oauth` (initiate) + `GET /api/auth/callback` (code exchange + role assignment).
 > Migration `0012` makes the new-user trigger tolerant of OAuth's missing role (defaults to `student`;
 > the callback writes the real chosen role while `onboarding_done` is false). Providers are enabled +
@@ -428,7 +428,7 @@ GET   /api/auth/me         [v1]  returns { user, profile, detail } — detail is
 
 ### Onboarding write (Option A) — **TODO**
 ```
-POST  /api/onboarding      [v1]   one-shot: after signup, write all collected onboarding
+POST  /api/onboarding      [built]   one-shot: after signup, write all collected onboarding
                                    data for the role (student/parent+children/tutor) in a
                                    single authenticated request. See §9 for the per-role payload.
 ```
@@ -440,15 +440,15 @@ POST  /api/onboarding      [v1]   one-shot: after signup, write all collected on
 
 ### Profiles & editing
 ```
-GET   /api/profiles/me     [v1]    lives at /api/auth/me (returns { user, profile, detail })
-PATCH /api/profiles/me     [v1]    role-routed: common profiles fields (display_name, full_name,
+GET   /api/profiles/me     [built]    lives at /api/auth/me (returns { user, profile, detail })
+PATCH /api/profiles/me     [built]    role-routed: common profiles fields (display_name, full_name,
                                    age, gender, avatar_url, district, preferred_language) for any
                                    role; student block (school_level, format/type, budget,
                                    preferred_languages[], preferred_districts[], interest ids
                                    full-replace); parent block (searching_for_self). Tutors edit
                                    profile via PATCH /api/tutors/[slug] + subjects/languages
                                    endpoints; a student/parent block on a tutor → 400.
-DELETE /api/profiles/me    [v1]    permanently delete own account (all roles). Purges the user's
+DELETE /api/profiles/me    [built]    permanently delete own account (all roles). Purges the user's
                                    media via the Storage API, then runs the SECURITY DEFINER
                                    delete_own_account() (migration 0013): deletes the auth user
                                    (cascades all data) + non-cascading seeker_availability rows;
@@ -457,11 +457,11 @@ DELETE /api/profiles/me    [v1]    permanently delete own account (all roles). P
 
 ### Children (parent-only)
 ```
-GET    /api/children       [v1]   list the parent's children (each with interest ids)  [auth, parent]
-POST   /api/children       [v1]   add a child (name + optional prefs/interests); enforces ≤6  [auth, parent]
-GET    /api/children/[id]  [v1]   one child (with interest ids)  [auth, owner]
-PATCH  /api/children/[id]  [v1]   edit any subset; interests full-replace if sent  [auth, owner]
-DELETE /api/children/[id]  [v1]   delete child; clears the child's availability rows first
+GET    /api/children       [built]   list the parent's children (each with interest ids)  [auth, parent]
+POST   /api/children       [built]   add a child (name + optional prefs/interests); enforces ≤6  [auth, parent]
+GET    /api/children/[id]  [built]   one child (with interest ids)  [auth, owner]
+PATCH  /api/children/[id]  [built]   edit any subset; interests full-replace if sent  [auth, owner]
+DELETE /api/children/[id]  [built]   delete child; clears the child's availability rows first
                                   (polymorphic owner_id, no FK), then deletes (interests cascade)
 ```
 > Same canonical input forms as `PATCH /api/profiles/me` (interest UUIDs, district enum codes,
@@ -470,10 +470,10 @@ DELETE /api/children/[id]  [v1]   delete child; clears the child's availability 
 
 ### Tutor subjects & languages (tutor-only, full-replace)
 ```
-GET   /api/tutor/languages [v1]   the tutor's teaching languages [{language, proficiency 1..4}]
-PUT   /api/tutor/languages [v1]   full-replace; body { languages: [{language, proficiency?}] | {lang:prof} }
-GET   /api/tutor/subjects  [v1]   the tutor's subjects (+ subcategory info)
-PUT   /api/tutor/subjects  [v1]   full-replace; body { subjects: [{subcategory_id, years_experience,
+GET   /api/tutor/languages [built]   the tutor's teaching languages [{language, proficiency 1..4}]
+PUT   /api/tutor/languages [built]   full-replace; body { languages: [{language, proficiency?}] | {lang:prof} }
+GET   /api/tutor/subjects  [built]   the tutor's subjects (+ subcategory info)
+PUT   /api/tutor/subjects  [built]   full-replace; body { subjects: [{subcategory_id, years_experience,
                                   hourly_rate_min, hourly_rate_max, achievements, qualifications,
                                   exam_results}] }; deduped by subcategory_id (last wins)
 ```
@@ -483,7 +483,7 @@ PUT   /api/tutor/subjects  [v1]   full-replace; body { subjects: [{subcategory_i
 > roles → 403; no tutor profile yet → 409. Tutor profile/contacts/publish stay on
 > `PATCH /api/tutors/[slug]`; availability on `PUT /api/availability`.
 
-> **Profile editing (v1):** all roles edit their onboarding preferences from the profile
+> **Profile editing:** all roles edit their onboarding preferences from the profile
 > screen. Tutors edit profile picture, bio, WhatsApp/Instagram/WeChat, categories,
 > availability, rates, districts, languages, and `is_published` (self-publish/unpublish).
 > Students/parents edit any onboarding preference. **DONE:** `PATCH /api/profiles/me` covers
@@ -493,59 +493,59 @@ PUT   /api/tutor/subjects  [v1]   full-replace; body { subjects: [{subcategory_i
 
 ### Tutors / browse
 ```
-GET   /api/tutors          [v1]   browse: ?subcategory_id=&district=&tutoring_format=&tutoring_type=&min_rate=&max_rate=&page=
-GET   /api/tutors/[slug]   [v1]   single tutor (public; includes posts)
-POST  /api/tutors          [v1]   create tutor profile (is_published defaults false)  [auth, role=tutor]
-PATCH /api/tutors/[slug]   [v1]   update own profile, incl. is_published + new contact fields  [auth, owner]
+GET   /api/tutors          [built]   browse: ?subcategory_id=&district=&tutoring_format=&tutoring_type=&min_rate=&max_rate=&page=
+GET   /api/tutors/[slug]   [built]   single tutor (public; includes posts)
+POST  /api/tutors          [built]   create tutor profile (is_published defaults false)  [auth, role=tutor]
+PATCH /api/tutors/[slug]   [built]   update own profile, incl. is_published + new contact fields  [auth, owner]
 ```
 > **DONE:** `instagram_handle` / `wechat_id` wired into `POST`/`PATCH` bodies and `GET /api/tutors/[slug]` (migration 0004).
 > **DONE:** `GET /api/tutors/[slug]` also returns per-subject `achievements` / `qualifications` / `exam_results` (jsonb) and the tutor's `tutor_languages` (`language` + `proficiency`).
-> **TODO:** extend `GET /api/tutors` browse filters and bodies to the remaining v1 set (languages, districts, etc.).
+> **TODO:** extend `GET /api/tutors` browse filters and bodies to the remaining full set (languages, districts, etc.).
 
 ### Home Feed
 ```
-GET   /api/feed            [v1]   personalized matches for a seeker; guests/others get latest tutors
+GET   /api/feed            [built]   personalized matches for a seeker; guests/others get latest tutors
 ```
 
 ### Categories
 ```
-GET   /api/categories      [v1]   all categories + subcategories
+GET   /api/categories      [built]   all categories + subcategories
 ```
 
 ### Availability
 ```
-GET   /api/availability    [v1]   caller's availability  [auth]
-PUT   /api/availability    [v1]   full-replace caller's availability (role-routed)  [auth]
+GET   /api/availability    [built]   caller's availability  [auth]
+PUT   /api/availability    [built]   full-replace caller's availability (role-routed)  [auth]
 ```
 > **DONE (0007):** request/response use precise `{ [day]: [{start,end}] }` minute ranges; parents pass a `child_id`.
 
 ### Posts
 ```
-GET    /api/tutors/[slug]/posts   [v1]  paginated, public
-POST   /api/tutors/[slug]/posts   [v1]  create post  [auth, owner]; optional media: [{url, media_type, sort_order?}]
+GET    /api/tutors/[slug]/posts   [built]  paginated, public
+POST   /api/tutors/[slug]/posts   [built]  create post  [auth, owner]; optional media: [{url, media_type, sort_order?}]
                                         (url must be in the media bucket; writes post_media, rollback on failure)
-DELETE /api/posts/[id]            [v1]  delete own post  [auth, owner]; cascades media/likes/comments
+DELETE /api/posts/[id]            [built]  delete own post  [auth, owner]; cascades media/likes/comments
 ```
 
 ### Saved Filters
 ```
-GET   /api/filters         [v1]   caller's saved filter preferences  [auth]
-PUT   /api/filters         [v1]   upsert (full replace)              [auth]
+GET   /api/filters         [built]   caller's saved filter preferences  [auth]
+PUT   /api/filters         [built]   upsert (full replace)              [auth]
 ```
 
-### Dormant / out of v1 (exist but not wired — do not build UI)
+### Dormant (code exists, switched off — no UI)
 ```
 POST  /api/tutors/[slug]/inquiries          [dormant]
 GET   /api/conversations                    [dormant]
 POST  /api/conversations                    [dormant]
 GET   /api/conversations/[id]/messages      [dormant]
 POST  /api/conversations/[id]/messages      [dormant]
-(no notification / push endpoints — out of v1)
+(no notification / push endpoints — not built; see TODO)
 ```
 
 ### Uploads (Storage)
 ```
-POST  /api/upload          [v1]   body { kind: 'avatar'|'post', content_type } → returns a signed
+POST  /api/upload          [built]   body { kind: 'avatar'|'post', content_type } → returns a signed
                                   upload URL + token + path + public_url. The app uploads bytes
                                   directly to the public `media` bucket (no service-role key —
                                   createSignedUploadUrl runs under the caller's session). Files go to
@@ -554,7 +554,7 @@ POST  /api/upload          [v1]   body { kind: 'avatar'|'post', content_type } �
                                   (avatar_url); post media via POST /api/tutors/[slug]/posts (media[]).
 ```
 
-### Hardening follow-ups (from code review — not v1 blockers)
+### Hardening follow-ups (from code review — not blockers)
 - **OAuth open redirect — FIXED (hardened):** `GET /api/auth/callback` validates `next` by **parsed
   origin** (http/https) or **scheme** (custom deep-links like `learnsum://`), against same-origin +
   `OAUTH_REDIRECT_ALLOWLIST`. Earlier prefix (`startsWith`) matching was bypassable
@@ -573,12 +573,12 @@ POST  /api/upload          [v1]   body { kind: 'avatar'|'post', content_type } �
 
 ---
 
-## 6. Matching Algorithm (v1)
+## 6. Matching Algorithm
 
 `GET /api/feed` personalizes for a seeker; guests and others get the latest published
 tutors (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC
-`match_tutors_for_seeker(...)` (`SECURITY DEFINER`, caller via `auth.uid()`), to be
-**reworked** for v1:
+`match_tutors_for_seeker(...)` (`SECURITY DEFINER`, caller via `auth.uid()`),
+**reworked** in migration 0008:
 
 **Weighting order (most → least important):**
 1. **Subject / category** match
@@ -588,7 +588,7 @@ tutors (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC
 5. **District** match (dropped for online-only tutors)
 
 - Weights are an **operator-tunable config** (single obvious place — the five integer
-  literals in the matching migration). **No end-user-facing weight controls in v1.**
+  literals in the matching migration). **No end-user-facing weight controls.**
 - **Soft scoring + graceful degradation:** no hard exclusions and **never an empty state** —
   if nothing matches well, the feed still returns the closest available tutors. A dimension
   with no data on either side is dropped and the remaining weights renormalize.
@@ -602,9 +602,9 @@ tutors (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC
 
 ---
 
-## 7. MVP vs out-of-scope
+## 7. Feature status
 
-### Build in v1
+### Built
 - [x] Tutor social profile (bio + post feed with photos/video)
 - [x] Tutor onboarding (Option A) incl. per-subject experience, achievements, qualifications, pay, availability
 - [x] Tutor "complete your profile" + explicit publish / self-unpublish
@@ -616,16 +616,35 @@ tutors (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC
 - [x] Posts: creation + feed viewer
 - [x] Profile editing for all roles + account deletion
 - [x] Email + password auth **and** social login (Google/Apple/Microsoft)
+- [x] Phone / SMS OTP auth endpoints (need Twilio + Supabase provider wired — see TODO below / CLAUDE.md)
 - [x] Schema for likes/comments (no interaction UI)
 
-### Explicitly OUT of v1
-- [ ] In-app chat / messaging (schema + endpoints exist, **dormant**; planned v2)
-- [ ] Inquiry form (schema + endpoint exist, **dormant**)
-- [ ] Push notifications **and** in-app notifications (fully out)
-- [ ] Post likes & comments UI (schema only)
-- [ ] Calendar / per-date scheduling (availability is recurring weekday ranges only)
-- [ ] Tutor onboarding sample-profile carousel (placeholder only — needs real profiles)
-- [ ] University verification badge
+### TODO (eventually)
+No launch deadline — everything below is intended for build at some point, in no fixed order.
+
+**Pending features**
+- [ ] In-app chat / messaging — `conversations`/`messages` schema + `/api/conversations*` exist but **dormant**; no real-time wiring, no UI.
+- [ ] Inquiry form — `inquiries` table + `POST /api/tutors/[slug]/inquiries` exist but **dormant**; no UI.
+- [ ] Post likes & comments UI — schema + counter triggers exist; build the interaction UI.
+- [ ] Push notifications **and** in-app notifications — `push_tokens`/`notifications` tables exist but unused; no endpoints, no wiring.
+- [ ] Email (Resend) — transactional email + email verification (currently OFF).
+- [ ] Calendar / per-date availability scheduling — current design uses recurring weekday ranges only.
+- [ ] Tutor onboarding sample-profile carousel — placeholder; needs real profiles first.
+- [ ] University verification badge.
+
+**Operational setup**
+- [ ] Wire Twilio + the Supabase phone provider so phone OTP sends real SMS (steps in CLAUDE.md "Pending setup"). Endpoints are already built.
+
+**Engineering / data-model follow-ups** (see also §5 "Hardening follow-ups")
+- [ ] A home for the tutor "relevant experience" list (column on `tutor_subcategories`).
+- [ ] Decide how the single onboarding pay figure maps to `hourly_rate_min`/`hourly_rate_max`.
+- [ ] Capture strategy for user-typed custom subjects (no DB home today).
+- [ ] Drop/relax the vestigial `profiles.preferred_language` / `profiles.district` single-enum columns.
+- [ ] Validate `avatar_url` against the media-bucket prefix (like post media).
+- [ ] Align `saved_filter_preferences.preferred_langs` to the expanded lowercase language set (0010).
+- [ ] Make the multi-step edit writes (profile / children / tutor subjects+languages) transactional.
+- [ ] Extend `GET /api/tutors` browse filters to the full set (languages, districts, etc.).
+- [ ] Add an automated integration test suite (today verification is live `curl`).
 
 ---
 

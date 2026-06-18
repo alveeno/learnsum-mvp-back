@@ -1,9 +1,9 @@
 # MVP Launch Roadmap
 ## Hong Kong Tutoring Marketplace (Learnsum)
 
-This document is the build roadmap for the MVP. For the authoritative v1 schema, API, and scope, see `plan.md` and `CLAUDE.md` in this repo — where they differ from the older phase descriptions below, **they win**.
+This document is the build roadmap for the MVP. For the authoritative schema, API, and scope, see `plan.md` and `CLAUDE.md` in this repo — where they differ from the older phase descriptions below, **they win**.
 
-> **v1 scope (current decisions):** Option A onboarding (email + password collected last), personalized weighted matching (subject > availability > price > language > district), full filter set + saved filters / Quick Match, tutor posts, WhatsApp / Instagram / WeChat contact, social login. **Out of v1:** in-app chat / messaging and the inquiry form (dormant code), push + in-app notifications (fully out), likes/comments UI. **Repos:** backend `learnsum-mvp-back`, frontend `learnsum-mvp-expo-app`.
+> **Current scope (built):** Option A onboarding (email + password collected last), personalized weighted matching (subject > availability > price > language > district), full filter set + saved filters / Quick Match, tutor posts, WhatsApp / Instagram / WeChat contact, social login. **TODO (eventually):** in-app chat / messaging and the inquiry form (dormant code), push + in-app notifications, likes/comments UI, email (Resend), calendar scheduling, verification badge — see the "TODO (eventually)" section near the end. **Repos:** backend `learnsum-mvp-back`, frontend `learnsum-mvp-expo-app`.
 
 ---
 
@@ -56,7 +56,7 @@ Always begin with:
 
 Update this section as you complete each step.
 
-> **Backend v1 endpoints: COMPLETE** (all built, tested live, committed on `main`; migrations
+> **Backend endpoints: COMPLETE** (all built, tested live, committed on `main`; migrations
 > `0004`–`0013` applied to live Supabase). Covers auth + **social login** (Google/Microsoft/Apple),
 > one-shot onboarding, tutor browse/profile/posts, categories, precise-range availability,
 > the weighted matching feed, saved filters, **file uploads** (avatars/post media), full
@@ -137,7 +137,7 @@ Save full output to PLAN.md.
 
 **Follow-up prompts to run in the same session:**
 1. *"Which parts of this schema are most likely to cause problems when we add likes, comments, and bilingual content later? What should we future-proof now?"*
-2. *"Given everything in PLAN.md, what are the 3 most important things to build first in the MVP, and what should we cut or defer to version two?"*
+2. *"Given everything in PLAN.md, what are the 3 most important things to build first in the MVP, and what should we cut or defer to a later TODO?"*
 
 ### What to check in PLAN.md before moving on
 - Full database tables and their relationships
@@ -179,7 +179,7 @@ What was completed:
 Prompt pattern to use for each endpoint:
 > "Activate Backend Architect mode. Read CLAUDE.md and PLAN.md. Build the [name] endpoint. Show me how to test it when done."
 
-**Recommended build order for v1:**
+**Recommended backend build order:**
 1. Authentication — email + password sign up/in/out (email verification OFF), all three roles; plus social login (Google / Apple / Microsoft)
 2. One-shot onboarding write (Option A) — create account + persist the role's onboarding data (student / parent + children / tutor). See `plan.md §9`
 3. Tutor profile read endpoint (public, no auth required)
@@ -191,7 +191,7 @@ Prompt pattern to use for each endpoint:
 9. Profile editing + account deletion (all roles); tutor publish / self-unpublish
 10. Contact columns (WhatsApp / Instagram / WeChat) on tutor profiles
 
-> **Out of v1 (do NOT build):** direct messaging / chat endpoints and notification / push endpoints. The chat + inquiry endpoints already in the repo stay **dormant**.
+> **TODO (not built yet):** direct messaging / chat endpoints and notification / push endpoints. The chat + inquiry endpoints already in the repo stay **dormant** — see the "TODO (eventually)" section near the end.
 
 ### Step 3 — Commit after each working endpoint
 After each endpoint is confirmed working:
@@ -222,7 +222,7 @@ Recommended screen build order (the onboarding flows are already built — see t
 7. Post creation + post feed viewer
 8. Profile editing (all roles) + account deletion
 
-> **Out of v1 (do NOT build):** direct messaging screen, notification centre, likes/comments UI.
+> **TODO (not built yet):** direct messaging screen, notification centre, likes/comments UI.
 
 **Rule for each screen:** Test it in the browser before moving to the next one. If something looks broken, describe what you see and paste any error messages into Claude Code.
 
@@ -265,7 +265,7 @@ Prompt:
 Fix only the critical blockers identified. Use the Rapid Prototyper for each fix:
 > "Activate Rapid Prototyper mode. Fix this critical issue: [paste the specific issue from Reality Checker output]."
 
-Save cosmetic issues, missing features, and nice-to-haves for version two.
+Save cosmetic issues, missing features, and nice-to-haves for the TODO list.
 
 ### Step 3 — Deploy to free hosting
 Prompt:
@@ -300,18 +300,22 @@ In GitHub Desktop:
 - All location data uses Hong Kong's 18 districts
 - Bilingual content (English and Traditional Chinese) must be accounted for in all user-facing text fields
 
-### What is deferred to version two
-- In-app chat / messaging (schema + `/api/conversations*` endpoints exist in the repo but are dormant)
+### TODO (eventually)
+No launch deadline — these are all intended for build at some point, in no fixed order. Several already have dormant schema/endpoints in the repo (switch them on, don't rebuild). The technical breakdown lives in `plan.md §7`.
+
+- In-app chat / messaging (schema + `/api/conversations*` endpoints exist but dormant)
 - Inquiry form (schema + `/api/tutors/[slug]/inquiries` exist but dormant)
-- Likes and comments on tutor posts (schema exists, interactions not built)
-- Calendar / per-date availability scheduling (v1 uses recurring weekday time ranges)
+- Likes and comments on tutor posts (schema + triggers exist, interactions not built)
+- Push notifications and in-app notifications (`push_tokens`/`notifications` tables exist but unused; no endpoints)
+- Email (Resend) — transactional email + email verification (currently OFF)
+- Calendar / per-date availability scheduling (current design uses recurring weekday time ranges)
+- Tutor onboarding sample-profile carousel (placeholder; needs real profiles)
+- Wire Twilio + Supabase phone provider so phone OTP sends real SMS (endpoints already built)
+- Verified tutor badges
 - In-app payments and booking system
 - Review and rating system
-- Advanced recommendation algorithm (v1 already has a basic weighted matching feed)
-- Verified tutor badges
+- Advanced recommendation algorithm (a basic weighted matching feed already exists)
 - Group tutoring session management
-
-> **Fully out (not even planned work for now):** push notifications and in-app notifications.
 
 ---
 

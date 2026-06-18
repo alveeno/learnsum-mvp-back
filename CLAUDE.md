@@ -14,7 +14,7 @@ LearnSum is a Hong Kong-based two-sided tutoring marketplace. Tutors build Insta
 - **Backend API:** Next.js 16 (App Router) — API routes only, no frontend pages or UI. **Dynamic route handlers must `await params`** (`params` is a Promise in Next 15+; reading it synchronously yields `undefined` and silently breaks `[slug]`/`[id]` lookups).
 - **Frontend:** React Native + Expo (separate repo: `learnsum-mvp-expo-app`) — not in this repository
 - **Backend + DB:** Supabase — auth, Postgres, Storage (media)
-- **Email:** Resend (transactional) — **not wired in v1** (email verification off, notifications out)
+- **Email:** Resend (transactional) — **not wired yet** (email verification off, notifications not built; see TODO)
 - **Deploy:** Vercel (API server only — no SSR pages, no static assets)
 
 > **Note:** This repository contains the backend API only. There is no frontend code here. All UI, screens, and components live in the `learnsum-mvp-expo-app` repository.
@@ -33,7 +33,7 @@ All auth methods (email, phone, social) create the account **before** collecting
 
 **Email+password:** `POST /api/auth/signup` with `{ email, password, role }` — creates the account and returns a live session. Email verification is OFF. `POST /api/auth/login` signs in.
 
-**Phone/SMS OTP (v1 ✅):** `POST /api/auth/phone` with `{ phone, role? }` sends a 6-digit OTP via SMS (Supabase phone provider + Twilio). `POST /api/auth/phone/verify` with `{ phone, token, role? }` verifies the code, creates or signs into the account, assigns role for new users, returns `{ user, session, is_new_user }`. Phone number is stored in `auth.users.phone` and returned by `GET /api/auth/me` on the `user` object — no separate `profiles.phone` column needed. Uses international E.164 format (+[country code][number]).
+**Phone/SMS OTP (built ✅):** `POST /api/auth/phone` with `{ phone, role? }` sends a 6-digit OTP via SMS (Supabase phone provider + Twilio). `POST /api/auth/phone/verify` with `{ phone, token, role? }` verifies the code, creates or signs into the account, assigns role for new users, returns `{ user, session, is_new_user }`. Phone number is stored in `auth.users.phone` and returned by `GET /api/auth/me` on the `user` object — no separate `profiles.phone` column needed. Uses international E.164 format (+[country code][number]).
 
 **Social login (Google/Apple/Microsoft):** backend-mediated via `POST`/`GET /api/auth/oauth` + `GET /api/auth/callback` (migration `0012` defaults a missing OAuth role to `student`; the callback assigns the real chosen role while `onboarding_done` is false; Microsoft → Supabase `azure`). The callback's `next` redirect is **allowlist-validated to prevent an open redirect** — set the **`OAUTH_REDIRECT_ALLOWLIST`** env (comma-separated trusted prefixes, e.g. `learnsum://,https://app.learnsum.com`) to the app deep-link scheme + web origin when wiring the frontend; same-origin is always allowed.
 
@@ -43,7 +43,7 @@ The one-shot onboarding write endpoint is **`POST /api/onboarding` ✅** — it 
 `tutor_profiles.is_published = true` makes a profile publicly visible (RLS enforces this). After onboarding a tutor stays **unpublished**; the tutor home screen shows a persistent "complete your profile" prompt → a dedicated screen for bio, photo, WhatsApp, Instagram, WeChat and remaining details, then the tutor **explicitly publishes**. Tutors can **self-unpublish** (set `is_published = false`) from their profile. An account is required for: posting content and (dormant) chat.
 
 ### Contact flow — WhatsApp / Instagram / WeChat
-Three optional columns on `tutor_profiles`: `whatsapp_number`, `instagram_handle`, `wechat_id` (the latter two added in migration `0004` ✅). All optional, any combination; the profile page shows every configured button simultaneously. WhatsApp opens `wa.me/[number]?text=Hi, I found you on LearnSum and I'm interested in tutoring for [subject].`; Instagram opens the profile; WeChat opens with the WeChat ID. **No inquiry form** (the `inquiries` table + endpoint remain but are dormant). **No in-app messaging in v1.**
+Three optional columns on `tutor_profiles`: `whatsapp_number`, `instagram_handle`, `wechat_id` (the latter two added in migration `0004` ✅). All optional, any combination; the profile page shows every configured button simultaneously. WhatsApp opens `wa.me/[number]?text=Hi, I found you on LearnSum and I'm interested in tutoring for [subject].`; Instagram opens the profile; WeChat opens with the WeChat ID. **No inquiry form** (the `inquiries` table + endpoint remain but are dormant). **No in-app messaging yet (see TODO).**
 
 ### Profile editing & account deletion (all roles)
 Every role can edit its onboarding preferences from the profile screen and **delete its account**. Tutors edit: profile picture, bio, WhatsApp/Instagram/WeChat, categories, availability, rates, districts, languages, and `is_published`. Students/parents edit any onboarding preference. **Endpoint coverage complete:** `PATCH /api/profiles/me` (account + student/parent prefs + interests), `/api/children` + `/api/children/[id]` (parent children CRUD), `PUT /api/tutor/subjects` + `PUT /api/tutor/languages` (tutor subjects/languages), `PATCH /api/tutors/[slug]` (tutor profile/contacts/publish), `PUT /api/availability` (schedules), and `DELETE /api/profiles/me` (account deletion via SECURITY DEFINER 0013).
@@ -54,37 +54,45 @@ Every role can edit its onboarding preferences from the profile screen and **del
 - User-generated posts: parallel `content` / `content_zh` columns.
 
 ### Denormalized counters require triggers
-`posts.likes_count` and `posts.comments_count` are denormalized; triggers on `post_likes` and `post_comments` maintain them (already in `0001`; see `plan.md §4.4a`). Likes/comments **UI is out of v1** — schema only.
+`posts.likes_count` and `posts.comments_count` are denormalized; triggers on `post_likes` and `post_comments` maintain them (already in `0001`; see `plan.md §4.4a`). Likes/comments **UI not built yet (see TODO)** — schema only.
 
-### `tutor_subcategories` — achievements/qualifications are v1
-v1 onboarding collects `subcategory_id`, `years_experience`, pay, **and** `achievements`, `qualifications`, `exam_results` (the tutor "Strengths & Details" screen already collects them). It also collects a free-text "relevant experience" list (needs a column — TODO) and a single pay figure per subject (map to `hourly_rate_min`/`max` — TODO). **`GET /api/tutors/[slug]` returns these three jsonb fields per subject, plus the tutor's `tutor_languages` (language + proficiency) ✅.** Post-onboarding, a tutor edits subjects via **`PUT /api/tutor/subjects`** (full-replace; pre-validates subcategory ids before the destructive delete) and teaching languages via **`PUT /api/tutor/languages`** (full-replace) ✅.
+### `tutor_subcategories` — achievements/qualifications collected in onboarding
+Onboarding collects `subcategory_id`, `years_experience`, pay, **and** `achievements`, `qualifications`, `exam_results` (the tutor "Strengths & Details" screen already collects them). It also collects a free-text "relevant experience" list (needs a column — TODO) and a single pay figure per subject (map to `hourly_rate_min`/`max` — TODO). **`GET /api/tutors/[slug]` returns these three jsonb fields per subject, plus the tutor's `tutor_languages` (language + proficiency) ✅.** Post-onboarding, a tutor edits subjects via **`PUT /api/tutor/subjects`** (full-replace; pre-validates subcategory ids before the destructive delete) and teaching languages via **`PUT /api/tutor/languages`** (full-replace) ✅.
 
 ### Parent children (NEW)
 A parent's tutoring preferences are **per child**, not on the parent. Each child is a `child_profiles` row (name, `school_level`, format/type/budget, preferred languages/districts) with its own `child_category_interests` and availability. **Matching runs per child.** (Tables added in migration `0006`, owner-only/private ✅; per-child matching ✅ (0008), onboarding write ✅ (0009), and full children CRUD ✅ via `/api/children` + `/api/children/[id]` — schedules via `PUT /api/availability?child_id=`.)
 
 ### Availability — precise time ranges (REDESIGNED)
-v1 stores **precise start/end minute ranges per weekday**, not `morning|afternoon|evening` buckets. The `time_slot` enum is removed; `tutor_availability` / `seeker_availability` use `start_min`/`end_min`; multiple ranges per day allowed. Written via `GET`/`PUT /api/availability` (role-routed; parents pass a `child_id`). **Done in migration `0007` ✅** (tables + endpoint reworked; children's per-child availability is code-complete but not live-testable until a children-creation endpoint exists).
+The current design stores **precise start/end minute ranges per weekday**, not `morning|afternoon|evening` buckets. The `time_slot` enum is removed; `tutor_availability` / `seeker_availability` use `start_min`/`end_min`; multiple ranges per day allowed. Written via `GET`/`PUT /api/availability` (role-routed; parents pass a `child_id`). **Done in migration `0007` ✅** (tables + endpoint reworked; children's per-child availability is code-complete but not live-testable until a children-creation endpoint exists).
 
 ### Two-sided matching (seeker → tutors)
-`GET /api/feed` is personalized for an authenticated seeker (a `student`, or a `parent`'s `child`) with ≥1 category interest; everyone else (guests, tutors, seekers with no interests) gets the latest-tutors feed (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC `match_tutors_for_seeker(...)` (`SECURITY DEFINER`, caller via `auth.uid()`). **v1 weighting order, most → least important: subject/category → availability (real time-overlap) → price → preferred language → district** (district dropped for online-only tutors). Scoring is **soft** with **graceful degradation — never an empty state**; a dimension with no data on either side is dropped and remaining weights renormalize. Weights are an **operator-tunable config** (the integer literals in the matching migration) — **no end-user weight UI in v1**. **Reworked in migration `0008` ✅** for precise time-overlap, a separate price dimension, the new weight order (subject 40 > availability 25 > price 15 > language 10 > district 7), and **per-child** matching; format/type are a minor tie-breaker (weight 3). `/api/feed` accepts a `child_id` for parents.
+`GET /api/feed` is personalized for an authenticated seeker (a `student`, or a `parent`'s `child`) with ≥1 category interest; everyone else (guests, tutors, seekers with no interests) gets the latest-tutors feed (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC `match_tutors_for_seeker(...)` (`SECURITY DEFINER`, caller via `auth.uid()`). **Weighting order, most → least important: subject/category → availability (real time-overlap) → price → preferred language → district** (district dropped for online-only tutors). Scoring is **soft** with **graceful degradation — never an empty state**; a dimension with no data on either side is dropped and remaining weights renormalize. Weights are an **operator-tunable config** (the integer literals in the matching migration) — **no end-user weight UI**. **Reworked in migration `0008` ✅** for precise time-overlap, a separate price dimension, the new weight order (subject 40 > availability 25 > price 15 > language 10 > district 7), and **per-child** matching; format/type are a minor tie-breaker (weight 3). `/api/feed` accepts a `child_id` for parents.
 
-## What is explicitly out of v1
+## TODO (eventually)
 
-Do not build these even if they seem natural extensions of adjacent work:
+No launch deadline — everything here is intended for build at some point, in no fixed order. Nothing is "cut"; it's just not built yet. Several already have dormant schema/endpoints in the repo (noted inline) — switch them on, don't rebuild from scratch.
 
-- In-app chat / messaging — `conversations`/`messages` schema + `/api/conversations*` exist but are **dormant** (planned v2). Contact is WhatsApp/Instagram/WeChat.
-- Inquiry form — `inquiries` table + `/api/tutors/[slug]/inquiries` exist but are **dormant**.
-- Push notifications **and** in-app notifications — **fully out** (no push tokens, no notifications written, no endpoints).
-- Post likes & comments UI (schema + triggers exist, hold the UI).
-- Calendar / per-date availability scheduling (matching uses recurring weekday ranges only).
-- Tutor onboarding sample-profile carousel (placeholder only — needs real profiles).
+**Pending features**
+- In-app chat / messaging — `conversations`/`messages` schema + `/api/conversations*` exist but are **dormant**; no real-time wiring, no UI. Contact today is WhatsApp/Instagram/WeChat.
+- Inquiry form — `inquiries` table + `/api/tutors/[slug]/inquiries` exist but are **dormant**; no UI.
+- Push notifications **and** in-app notifications — no push tokens, no notifications written, no endpoints (`push_tokens`/`notifications` tables exist but unused).
+- Post likes & comments UI — schema + triggers exist; build the interaction UI.
+- Email (Resend) — transactional email + email verification (currently OFF).
+- Calendar / per-date availability scheduling — matching uses recurring weekday ranges only.
+- Tutor onboarding sample-profile carousel — placeholder only; needs real profiles first.
 - University verification badge.
 
-> **Now IN v1** (previously deferred): personalized matching feed, saved filter preferences (`GET`/`PUT /api/filters` + Quick Match card), the full filter set (languages, districts, format, type, subcategory, price, availability), tutor posts (creation + feed viewer), social login.
+**Operational setup**
+- Wire Twilio + the Supabase phone provider so phone OTP sends real SMS (steps under "Pending setup" below). Endpoints are already built.
+
+**Engineering / data-model follow-ups** (full list in `plan.md §5/§7`)
+- A home for the tutor "relevant experience" list; single pay figure → `hourly_rate_min`/`max` mapping; custom-subject capture; drop vestigial single-enum `profiles` columns; `avatar_url` validation; align saved-filter languages to the expanded set; transactional multi-step writes; extend `GET /api/tutors` filters; automated test suite.
+
+> **Already built** (previously deferred, now done): personalized matching feed, saved filter preferences (`GET`/`PUT /api/filters` + Quick Match card), the full filter set (languages, districts, format, type, subcategory, price, availability), tutor posts (creation + feed viewer), social login.
 
 ## Migrations note
 
-`supabase/migrations/`: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`, `0004_tutor_contact_columns.sql` (Instagram/WeChat), `0005_school_level_six_values.sql` (4→6 education levels), `0006_child_profiles.sql` (per-child seeker tables, owner-only), `0007_precise_availability.sql` (bucket→precise time ranges; rebuilds `seeker_availability` per-child), `0008_matching_rpc_rework.sql` (precise-overlap + price + per-child matching RPC), `0009_complete_onboarding.sql` (atomic one-shot onboarding writer), `0010_language_refinement.sql` (`tutor_languages` + student language/district lists; matching + onboarding updated to use them), `0011_storage_media_bucket.sql` (public `media` bucket + owner-only storage RLS for avatars/post media), `0012_oauth_role_default.sql` (new-user trigger defaults a missing/OAuth role to `student`; the OAuth callback sets the real role), `0013_delete_own_account.sql` (SECURITY DEFINER self-deletion: removes the auth user + non-cascading seeker_availability; media purged via Storage API in the endpoint). The stale `0002_rls_policies.sql` duplicate has been removed. **Applied to live Supabase:** 0001, 0002, 0004, 0005, 0006, 0007, 0008, 0009, 0010, 0011, 0012, 0013 (all v1 migrations live). **`0003` is superseded by 0007/0008 — do not apply it.** **All v1 schema migrations are now written (0004–0013).**
+`supabase/migrations/`: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`, `0004_tutor_contact_columns.sql` (Instagram/WeChat), `0005_school_level_six_values.sql` (4→6 education levels), `0006_child_profiles.sql` (per-child seeker tables, owner-only), `0007_precise_availability.sql` (bucket→precise time ranges; rebuilds `seeker_availability` per-child), `0008_matching_rpc_rework.sql` (precise-overlap + price + per-child matching RPC), `0009_complete_onboarding.sql` (atomic one-shot onboarding writer), `0010_language_refinement.sql` (`tutor_languages` + student language/district lists; matching + onboarding updated to use them), `0011_storage_media_bucket.sql` (public `media` bucket + owner-only storage RLS for avatars/post media), `0012_oauth_role_default.sql` (new-user trigger defaults a missing/OAuth role to `student`; the OAuth callback sets the real role), `0013_delete_own_account.sql` (SECURITY DEFINER self-deletion: removes the auth user + non-cascading seeker_availability; media purged via Storage API in the endpoint). The stale `0002_rls_policies.sql` duplicate has been removed. **Applied to live Supabase:** 0001, 0002, 0004, 0005, 0006, 0007, 0008, 0009, 0010, 0011, 0012, 0013 (all migrations live). **`0003` is superseded by 0007/0008 — do not apply it.** **All schema migrations are now written (0004–0013).**
 
 ---
 
