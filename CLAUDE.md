@@ -96,6 +96,38 @@ No launch deadline — everything here is intended for build at some point, in n
 
 ---
 
+## Adding new features — frontend-first workflow
+
+New features land in the **frontend repo (`learnsum-mvp-expo-app`) first** (for a live
+preview), then the backend is built to support them. When the user says they've added a
+feature, follow this loop — **do NOT auto-build from the frontend code**:
+
+1. **Locate what's new.** The frontend repo is on the same machine at
+   `../learnsum-mvp-expo-app` (sibling of this repo). Read it **directly** — never ask the
+   user to type functions out. Narrow the scan with what the user points at, or use the
+   frontend's recent git history (`git -C ../learnsum-mvp-expo-app log` / `diff`) to see
+   exactly what changed since last time, rather than re-scanning the whole app.
+2. **Gap-analyse, don't assume.** Much of the frontend is **prototype / sample UI that was
+   never meant to become a real backend feature** (e.g. stories, follows / "Connect",
+   ratings, followers, analytics, premium/payments). For each new frontend capability the
+   backend can't support, give a short **build / skip / defer** recommendation. See
+   `BACKEND_GAP_ANALYSIS.md` for the format and the standing decisions.
+3. **Get the user's call.** The user owns the product decision of which prototype ideas
+   become real — **never build a new system (table / endpoint) off frontend code alone.**
+   Wait for an explicit "build these".
+4. **Build the approved items** + write the migration. Migrations are applied **manually**
+   by the user in the Supabase SQL editor, so always tell them to run the new file.
+5. **Keep the docs honest.** Update this file / `plan.md` / `BACKEND_GAP_ANALYSIS.md` so a
+   future session isn't misled (e.g. flip a "no DB home yet" note to the migration that
+   added it).
+
+Rationale: the bottleneck is *deciding* what's real, not *gathering* the feature list —
+reading the code is accurate and effort-free, but database changes are hard to reverse, so
+the human approval gate stays. (`FRONTEND_WIRING.md` maps each screen to the endpoint it
+should call.)
+
+---
+
 ## Frontend integration notes
 
 > This section exists so backend sessions have the frontend contract without opening the
