@@ -11,6 +11,37 @@ endpoint names directly.
 
 ---
 
+## ⭐ Build order — wire the *core loop* first
+
+Don't wire screens in file order. Wire the **core loop** — the chain that makes the
+marketplace actually work — top to bottom, and leave everything else on mock data until
+it's proven:
+
+> **A tutor signs up → onboards → publishes → appears in a seeker's feed → the seeker opens
+> the profile → taps WhatsApp / Instagram / WeChat.**
+
+**🟢 Tier 1 — the core loop (wire first, in this order):**
+1. **Auth + token helper** (§1) — replaces the mock "DEV · Logged in" state; everything depends on it.
+2. **Sign up / log in** (§3.2–3.3) — `POST /api/auth/signup` / `login`. **Credentials come first (all roles).**
+3. **Subject pickers** — `GET /api/categories` (so subjects map to real IDs).
+4. **Onboarding one-shot save** (§3.3) — `POST /api/onboarding` (where the tutor's levels/experience/education land).
+5. **Tutor publish** (§3.5) — `PATCH /api/tutors/[slug]` `is_published:true` (else the profile is invisible).
+6. **Home feed** (§3.4) — `GET /api/feed`.
+7. **Public tutor profile + contact** (§3.7) — `GET /api/tutors/[slug]` + the contact buttons (the loop closes here).
+8. **Posts — view then create** (§3.6) — `GET`/`POST /api/tutors/[slug]/posts` (+ `POST /api/upload`).
+
+**🟡 Tier 2 — wire right after** (the loop works without them): profile editing + account
+deletion (§3.8), search + real filters (§3.7), saved filters, likes.
+
+**⚪ Tier 3 — leave as mock / don't wire** (no backend, or deferred): Chat, Analytics,
+Premium/payments, Stories, "Tutors you may know", Qualified badge, followers/ratings filters,
+notifications. (See `BACKEND_GAP_ANALYSIS.md`.)
+
+The day Tier 1 works end-to-end you have a real, functioning marketplace — even with every
+Tier-2/3 screen still on mock data. That's the milestone.
+
+---
+
 ## 0. How to read each entry
 
 - **What the user does** — the button/screen.
@@ -38,9 +69,11 @@ Two foundational pieces the whole app shares:
    `Authorization: Bearer <token>`. Build **one** helper that automatically
    attaches it to every request — then no individual screen has to remember.
 
-> ⚠️ **Today the app uses a fake "DEV · Logged in" session** (the badge in the
-> tutor home screenshot). Nothing currently reaches this backend. Step 1 is what
-> replaces that mock with a real connection.
+> ⚠️ **The "DEV · Logged in" badge is a dev-only toggle** that flips the app between the
+> **logged-in** and **logged-out** views (e.g. "Tutors you may know" only shows when logged
+> in, since it keys off the signed-in tutor's own education record). It runs on mock state
+> today — **nothing currently reaches this backend.** Step 1 replaces that mock with a real
+> session + token.
 
 ---
 
@@ -51,8 +84,8 @@ or serve. Decide each before wiring the affected screen:
 
 | Gap | What happens today | Options |
 |---|---|---|
-| **"Who do you teach?" levels** (Kindergarten…Adult) | `POST /api/onboarding` **throws these away** (code reports `"tutor teaching levels … no DB home yet"`). | Add a small table/column to store them, **or** accept they aren't saved. |
-| **Tutor "relevant experience" list** | Also thrown away (no column). | Add a column on `tutor_subcategories`, or drop the field from the screen. |
+| **Teaching levels** + **education history** + **per-subject experience** | ✅ **Now stored** (migration 0014): `tutor_profiles.teaching_levels` / `education` / `current_studies`, `tutor_subcategories.experience`. | Done — the app just needs to *send* them (see §3.3). |
+| **Gender `lgbtq`/`na`, first/last name** | ✅ **Now handled** (0014 + `/api/onboarding`): `lgbtq`→`lgbt`, `na`→prefer-not-to-say, first+last→`full_name`. | Done — just send them. |
 | **Subject slugs ↔ database** | Onboarding maps the app's subject words (e.g. `"mathematics"`) to database IDs. If the app's hardcoded words don't match the seeded database words, the subject is silently skipped. | Either seed the database to match the app's words, **or** have the app fetch `GET /api/categories` and use the real IDs. |
 | **Chat tab** | Backend chat is built but **switched off** (TODO). | Leave the tab as "coming soon" until you turn chat on. |
 | **Analytics tab (padlock)** | **No analytics in the backend at all.** | Keep as a placeholder. |
@@ -66,8 +99,9 @@ or serve. Decide each before wiring the affected screen:
 ### 3.1 Welcome screen — "I am a… Student / Parent / Tutor" + Continue
 - **What the user does:** picks a role, taps Continue.
 - **Call:** *(none yet)* — just remember the chosen role on the phone.
-- **Note:** By design (your "Option A"), **the account is created at the very end
-  of onboarding**, not here. So Continue only moves to the first onboarding screen.
+- **Note:** Picking a role just routes into that role's flow. **The account is created up
+  front — the first step of the flow is sign-up / log-in (credentials first, all roles)** —
+  not at the end. (Tutors reach this via the "Complete profile" prompt on the home screen; see 3.3.)
 
 ### 3.2 "Log in now" (returning users)
 - **What the user does:** enters email + password (or taps a social/phone option).
@@ -77,31 +111,36 @@ or serve. Decide each before wiring the affected screen:
 - **Gets back:** a session **token** + `is_new_user`. Store the token (step 1).
 - **Note:** `is_new_user = false` → skip onboarding, go straight to home.
 
-### 3.3 Onboarding flow → create account + save everything  ⭐ THE BIG ONE
-This is the heart of it. Every onboarding screen (role, levels, subjects, rates,
-languages, districts, availability…) writes into a **temporary notebook in the
-phone's memory** — *nothing is sent to the backend yet*. Then the final screen
-does it all at once:
+### 3.3 Onboarding flow → create account first, then save everything  ⭐ THE BIG ONE
+This is the heart of it. **Credentials come first (all roles):**
 
-1. **Final screen collects email + password.**
-2. **Call `POST /api/auth/signup`** — Sends `{ email, password, role }`. Gets back
-   a live token. *(The account now exists.)*
-3. **Immediately call `POST /api/onboarding`** (with the token) — Sends the whole
-   notebook in one parcel. The backend sorts it into the right drawers and
-   translates the app's words into database codes automatically.
+1. **Sign-up / log-in is the FIRST step.** **Call `POST /api/auth/signup`** — Sends
+   `{ email, password, role }`. Gets back a live token. *(The account now exists; store the
+   token — §1.)* A returning user logs in instead (`is_new_user = false` → skip onboarding).
+   Tutors reach this gate via the home-screen "Complete profile" prompt.
+2. **Then they answer the onboarding questions** (levels, subjects, rates, languages,
+   districts, availability…). Each screen writes into a **temporary notebook in the phone's
+   memory** while the user is already signed in.
+3. **On the final step, call `POST /api/onboarding`** (with the token) — Sends the whole
+   notebook in one parcel. The backend sorts it into the right drawers and translates the
+   app's words into database codes automatically.
 
 **What the tutor parcel looks like** (plain shape):
 ```
 {
-  "profile": { "display_name": "...", "full_name": "...", "age": 0, "gender": "..." },
+  "profile": { "first_name": "Jane", "last_name": "Wong", "gender": "lgbtq", "age": 0 },
   "tutor": {
     "slug": "jane-wong",                       // their public URL: /tutors/jane-wong
     "university": "HKU",
     "format": "both",                          // online | in_person | both
     "type": "individual",                      // individual | group | both
+    "levels": ["high", "university"],          // which levels they teach (A1)
+    "education": { "university": [{ "institution": "HKU", "qualification": "BSc", "score": "First" }] },
+    "current_studies": [{ "institution": "HKU", "programme": "MPhil" }],
     "subjects": [
       { "subcategory": "mathematics", "years": "5", "pay": 350,
-        "achievements": ["..."], "qualifications": {...}, "exam_results": {...} }
+        "achievements": ["..."], "qualifications": {...}, "exam_results": {...},
+        "experiences": [{ "text": "...", "kind": "duration", "dur": "2", "unit": "years", "ongoing": true }] }
     ],
     "languages": { "english": 4, "cantonese": 3 },   // language → 1..4 proficiency
     "availability": { "mon": [{ "start": 540, "end": 720 }] }  // minutes from midnight

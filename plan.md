@@ -17,10 +17,10 @@ Hong Kong-based two-sided tutoring marketplace with a social media layer.
 **Three user types:** Parent · Student · Tutor
 
 **Core philosophy:**
-- **Browse is public, account is created at the end.** A guest can browse the whole
-  app. Onboarding collects everything *first*; **email + password are collected on the
-  final step** ("Option A" — see §9). Submitting credentials creates the account and
-  writes all collected onboarding data in one shot.
+- **Browse is public; the account is created up front, the data saved at the end.** A guest
+  can browse the whole app. When they start a role's flow they **sign up / log in first**
+  (credentials first — see §9), then answer the onboarding questions under the live session;
+  the one-shot write persists everything at the end.
 - Tutor profiles work like Instagram — bio block + scrollable post feed.
 - Two-way discovery — parents/students find tutors via a personalized, weighted feed.
 - **Contact is WhatsApp / Instagram / WeChat** (all optional, any combination). No
@@ -77,9 +77,9 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`, `0012_oauth_role_default.sql`, `0013_delete_own_account.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS), 0012 (OAuth-tolerant new-user trigger), 0013 (self-service account deletion).
-> **All schema migrations are now written (0004–0013).**
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`, `0012_oauth_role_default.sql`, `0013_delete_own_account.sql`, `0014_tutor_profile_extras.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS), 0012 (OAuth-tolerant new-user trigger), 0013 (self-service account deletion), 0014 (tutor profile extras — teaching levels, per-subject experience, education history, `lgbt` gender).
+> **All schema migrations are now written and applied (0004–0014).**
 
 ### 4.1 Auth & Core Profiles
 
@@ -408,7 +408,7 @@ GET   /api/auth/me         [built]  returns { user, profile, detail } — detail
                                   tutor → tutor_profile + subjects + languages)
 ```
 > **Email verification is OFF** in Supabase Auth, so `signup` returns a live session and
-> the app can immediately write onboarding data under the new user (Option A, §9). No
+> the app can immediately write onboarding data under the new user (credentials first, §9). No
 > service-role key is required for that path.
 > **Social login (Google / Apple / Microsoft) is built.** **DONE:** backend-mediated OAuth via
 > `POST`/`GET /api/auth/oauth` (initiate) + `GET /api/auth/callback` (code exchange + role assignment).
@@ -426,7 +426,7 @@ GET   /api/auth/me         [built]  returns { user, profile, detail } — detail
 > **`OAUTH_REDIRECT_ALLOWLIST`** env prefixes); set that env to the app deep-link scheme + web origin
 > when wiring the frontend.
 
-### Onboarding write (Option A) — **TODO**
+### Onboarding write (credentials first)
 ```
 POST  /api/onboarding      [built]   one-shot: after signup, write all collected onboarding
                                    data for the role (student/parent+children/tutor) in a
@@ -606,7 +606,7 @@ tutors (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC
 
 ### Built
 - [x] Tutor social profile (bio + post feed with photos/video)
-- [x] Tutor onboarding (Option A) incl. per-subject experience, achievements, qualifications, pay, availability
+- [x] Tutor onboarding (credentials first) incl. per-subject experience, achievements, qualifications, pay, availability
 - [x] Tutor "complete your profile" + explicit publish / self-unpublish
 - [x] Public tutor browse with the **full filter set**
 - [x] **Personalized weighted matching feed** (subject > availability > price > language > district), per child for parents
@@ -656,18 +656,22 @@ No launch deadline — everything below is intended for build at some point, in 
   page. Runs per child for parents.
 - **Tutor profile page** (`/tutors/[slug]`): profile + first posts; contact buttons for
   every configured method.
-- **Onboarding → account:** browse freely → fill role onboarding → enter email + password
-  on the final step → account created (session live, no email verification) → all onboarding
-  data written in one shot. Tutor lands unpublished with a "complete your profile" prompt.
+- **Onboarding → account:** browse freely → **sign up / log in first** (credentials first,
+  all roles) → answer the role's onboarding under the live session (no email verification) →
+  all onboarding data written in one shot at the end. Tutor lands unpublished with a
+  "complete your profile" prompt (which is also where the tutor flow's sign-up gate lives).
 
 ---
 
-## 9. Onboarding & Auth (Option A)
+## 9. Onboarding & Auth (credentials first)
 
-Credentials are collected **last**. The in-memory onboarding store (frontend
-`components/onboarding/onboardingStore.ts`) holds everything until then; on credential
-submit the app creates the account and persists the store. Email verification is **off**
-so the new account is immediately usable.
+Credentials are collected **first**. Every role (tutor, student, parent) **signs up / logs
+in before answering any onboarding questions** — so the account + session exist from the
+start (the tutor reaches this via the "Complete profile" prompt on the home screen). The
+in-memory onboarding store (frontend `components/onboarding/onboardingStore.ts`) holds the
+answers while the user is signed in, and the one-shot `POST /api/onboarding` write persists
+them at the **end** of the flow. Email verification is **off**, so the account is usable
+immediately. (Returning users are detected at sign-up via `is_new_user` and skip onboarding.)
 
 **Per-role data to persist** (see the backend `CLAUDE.md` "Frontend integration notes" for
 exact store keys and field shapes):

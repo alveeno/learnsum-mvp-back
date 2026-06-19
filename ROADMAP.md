@@ -3,7 +3,7 @@
 
 This document is the build roadmap for the MVP. For the authoritative schema, API, and scope, see `plan.md` and `CLAUDE.md` in this repo — where they differ from the older phase descriptions below, **they win**.
 
-> **Current scope (built):** Option A onboarding (email + password collected last), personalized weighted matching (subject > availability > price > language > district), full filter set + saved filters / Quick Match, tutor posts, WhatsApp / Instagram / WeChat contact, social login. **TODO (eventually):** in-app chat / messaging and the inquiry form (dormant code), push + in-app notifications, likes/comments UI, email (Resend), calendar scheduling, verification badge — see the "TODO (eventually)" section near the end. **Repos:** backend `learnsum-mvp-back`, frontend `learnsum-mvp-expo-app`.
+> **Current scope (built):** credentials-first onboarding (sign up / log in before the questions, all roles), personalized weighted matching (subject > availability > price > language > district), full filter set + saved filters / Quick Match, tutor posts, WhatsApp / Instagram / WeChat contact, social login. **TODO (eventually):** in-app chat / messaging and the inquiry form (dormant code), push + in-app notifications, likes/comments UI, email (Resend), calendar scheduling, verification badge — see the "TODO (eventually)" section near the end. **Repos:** backend `learnsum-mvp-back`, frontend `learnsum-mvp-expo-app`.
 
 ---
 
@@ -181,7 +181,7 @@ Prompt pattern to use for each endpoint:
 
 **Recommended backend build order:**
 1. Authentication — email + password sign up/in/out (email verification OFF), all three roles; plus social login (Google / Apple / Microsoft)
-2. One-shot onboarding write (Option A) — create account + persist the role's onboarding data (student / parent + children / tutor). See `plan.md §9`
+2. One-shot onboarding write (credentials first) — account is created at sign-up; this persists the role's onboarding data (student / parent + children / tutor) at the end. See `plan.md §9`
 3. Tutor profile read endpoint (public, no auth required)
 4. Category and subcategory listing endpoint
 5. Availability (precise time ranges) — GET/PUT, role-routed
@@ -214,7 +214,7 @@ Prompt:
 ### Step 2 — Build screens one at a time
 Recommended screen build order (the onboarding flows are already built — see the frontend `CLAUDE.md`):
 1. Welcome screen — user-type selection (built)
-2. Onboarding flows: student / parent (per child) / tutor — built; wire the final credential step (Option A) to create the account + persist the collected data
+2. Onboarding flows: student / parent (per child) / tutor — built; wire the up-front sign-up / log-in step (credentials first, all roles) + the one-shot save that persists the collected data
 3. Home feed — personalized matched tutor cards (guest = latest published tutors)
 4. Tutor profile page — Instagram-style (bio top, post feed below) + WhatsApp / Instagram / WeChat contact buttons
 5. Full search + filter panel; saved filters + Quick Match card

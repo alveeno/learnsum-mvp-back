@@ -16,10 +16,10 @@ project of its own). **Depends on** = can't be built until that other gap is.
 
 ---
 
-> ✅ **Group A (A1–A5) is now BUILT** — migration `0014_tutor_profile_extras.sql` + updates to
-> `/api/onboarding`, `/api/tutor/subjects`, and `/api/tutors/[slug]`. **Action needed:** apply
-> `0014` in the Supabase SQL editor to activate it. The frontend must also start *sending* these
-> fields (it doesn't yet) — see `FRONTEND_WIRING.md`.
+> ✅ **Group A (A1–A5) is now BUILT and LIVE** — migration `0014_tutor_profile_extras.sql`
+> (applied to Supabase) + updates to `/api/onboarding`, `/api/tutor/subjects`, and
+> `/api/tutors/[slug]`. The frontend still needs to start *sending* these fields (it doesn't
+> yet) — see `FRONTEND_WIRING.md`.
 
 ## Summary table (my recommendation — you decide)
 
