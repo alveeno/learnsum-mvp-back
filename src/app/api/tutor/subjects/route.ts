@@ -69,6 +69,7 @@ type SubjectRow = {
   achievements: unknown
   qualifications: unknown
   exam_results: unknown
+  experience: unknown
 }
 
 // Validate + shape the subjects array, deduped by subcategory_id (last wins).
@@ -100,6 +101,12 @@ function buildSubjects(input: unknown): { rows: SubjectRow[] } | { error: string
     if ('error' in qual) return { error: qual.error }
     const exam = parseJsonb(s.exam_results, 'exam_results')
     if ('error' in exam) return { error: exam.error }
+    // "relevant experience" list (A2) — an array of entries, or null.
+    let experience: unknown = null
+    if (s.experience !== undefined && s.experience !== null) {
+      if (!Array.isArray(s.experience)) return { error: 'experience must be an array or null' }
+      experience = s.experience
+    }
 
     byId.set(s.subcategory_id, {
       subcategory_id: s.subcategory_id,
@@ -109,6 +116,7 @@ function buildSubjects(input: unknown): { rows: SubjectRow[] } | { error: string
       achievements: ach.value,
       qualifications: qual.value,
       exam_results: exam.value,
+      experience,
     })
   }
   return { rows: [...byId.values()] }
@@ -126,7 +134,7 @@ export async function GET() {
     .from('tutor_subcategories')
     .select(
       `id, subcategory_id, years_experience, hourly_rate_min, hourly_rate_max,
-       achievements, qualifications, exam_results,
+       achievements, qualifications, exam_results, experience,
        subcategories ( id, name_en, name_zh, slug )`
     )
     .eq('tutor_id', user.id)

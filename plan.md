@@ -209,9 +209,9 @@ exam_results        jsonb  {"en": "HKDSE Maths 5**", "zh": "..."} — collected 
 > **Changed:** `achievements` / `qualifications` / `exam_results` are now **collected in onboarding**
 > (the tutor "Strengths & Details" screen already collects them). The onboarding also
 > collects a free-text **"relevant experience"** list and a single **preferred pay**
-> figure per subject. **TODO (migration / mapping):** add a home for "experience"
-> (e.g. an `experience` jsonb/array on `tutor_subcategories`); decide how the single
-> pay figure maps to `hourly_rate_min`/`hourly_rate_max` (e.g. set both, or treat as min).
+> figure per subject. **DONE (0014):** `experience` jsonb on `tutor_subcategories` holds the
+> list; the single pay figure maps to **both** `hourly_rate_min`/`hourly_rate_max`. Tutor
+> teaching levels + education history live on `tutor_profiles` (`teaching_levels`/`education`/`current_studies`).
 
 #### 4.2a Expanded language set
 The seeker language selection and tutor teaching languages now include the extended list
@@ -434,9 +434,9 @@ POST  /api/onboarding      [built]   one-shot: after signup, write all collected
 ```
 > **DONE (0009):** `POST /api/onboarding` maps the frontend's slugs/labels → backend IDs/enums
 > and persists the role's data atomically via the `complete_onboarding()` SQL function (one
-> transaction = all-or-nothing). Custom subjects + tutor levels/proficiency/experience are
-> skipped and reported (no DB home yet); seeker language/district go into the single
-> `profiles` columns for now (multi-value lists pending a later migration).
+> transaction = all-or-nothing). Custom subjects are skipped and reported; tutor teaching
+> levels, per-subject experience and education history are now persisted (migration 0014;
+> language proficiency is display-only).
 
 ### Profiles & editing
 ```
@@ -636,8 +636,8 @@ No launch deadline — everything below is intended for build at some point, in 
 - [ ] Wire Twilio + the Supabase phone provider so phone OTP sends real SMS (steps in CLAUDE.md "Pending setup"). Endpoints are already built.
 
 **Engineering / data-model follow-ups** (see also §5 "Hardening follow-ups")
-- [ ] A home for the tutor "relevant experience" list (column on `tutor_subcategories`).
-- [ ] Decide how the single onboarding pay figure maps to `hourly_rate_min`/`hourly_rate_max`.
+- [x] A home for the tutor "relevant experience" list — `experience` jsonb on `tutor_subcategories` (migration 0014).
+- [x] Single onboarding pay figure maps to both `hourly_rate_min`/`hourly_rate_max` (migration 0014).
 - [ ] Capture strategy for user-typed custom subjects (no DB home today).
 - [ ] Drop/relax the vestigial `profiles.preferred_language` / `profiles.district` single-enum columns.
 - [ ] Validate `avatar_url` against the media-bucket prefix (like post media).
@@ -685,4 +685,4 @@ exact store keys and field shapes):
 
 > **DONE (0009):** `POST /api/onboarding` exists; it maps category slugs → `subcategories.id`
 > and district labels → `hk_district` codes (§4.2, §4.10) server-side, then writes atomically.
-> Custom subjects + tutor levels/proficiency/experience are skipped and reported (no DB home yet).
+> Custom subjects are skipped and reported; tutor teaching levels, per-subject experience and education history are persisted (migration 0014). Language proficiency is display-only.

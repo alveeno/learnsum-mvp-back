@@ -12,7 +12,22 @@ const VALID_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 const VALID_LEVELS = new Set(['kindergarten', 'primary', 'middle', 'high', 'university', 'adult'])
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
 const VALID_TYPES = new Set(['individual', 'group', 'both'])
-const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer_not_to_say'])
+// Frontend gender values → backend gender_type enum. The tutor "About you"
+// screen offers male/female/lgbtq/na; map lgbtq→lgbt (added in migration 0014)
+// and na→prefer_not_to_say. Backend values pass through unchanged.
+const GENDER_ALIASES: Record<string, string> = {
+  male: 'male',
+  female: 'female',
+  other: 'other',
+  prefer_not_to_say: 'prefer_not_to_say',
+  lgbtq: 'lgbt',
+  lgbt: 'lgbt',
+  na: 'prefer_not_to_say',
+}
+function normalizeGender(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  return GENDER_ALIASES[v.trim().toLowerCase()] ?? null
+}
 
 // HK district label → enum code (frontend sends "<region>:<Label>").
 const DISTRICT_LABEL_TO_ENUM: Record<string, string> = {
@@ -159,11 +174,24 @@ export async function POST(request: Request) {
   const rawProfile = (body as { profile?: Record<string, unknown> }).profile
   const profilePayload: Record<string, unknown> = {}
   if (rawProfile) {
-    if (typeof rawProfile.display_name === 'string') profilePayload.display_name = rawProfile.display_name.trim()
-    if (typeof rawProfile.full_name === 'string') profilePayload.full_name = rawProfile.full_name.trim()
+    // A5 — Name: accept a single full_name, or combine first_name + last_name
+    // (the tutor "About you" screen collects first + last separately).
+    const first = typeof rawProfile.first_name === 'string' ? rawProfile.first_name.trim() : ''
+    const last = typeof rawProfile.last_name === 'string' ? rawProfile.last_name.trim() : ''
+    if (typeof rawProfile.full_name === 'string' && rawProfile.full_name.trim()) {
+      profilePayload.full_name = rawProfile.full_name.trim()
+    } else if (first || last) {
+      profilePayload.full_name = `${first} ${last}`.trim()
+    }
+    if (typeof rawProfile.display_name === 'string' && rawProfile.display_name.trim()) {
+      profilePayload.display_name = rawProfile.display_name.trim()
+    } else if (first) {
+      profilePayload.display_name = first
+    }
     const age = optInt(rawProfile.age)
     if (age !== null) profilePayload.age = age
-    if (typeof rawProfile.gender === 'string' && VALID_GENDERS.has(rawProfile.gender)) profilePayload.gender = rawProfile.gender
+    const gender = normalizeGender(rawProfile.gender) // A4: lgbtq→lgbt, na→prefer_not_to_say
+    if (gender) profilePayload.gender = gender
   }
 
   const resolved: Record<string, unknown> = { profile: profilePayload }
@@ -234,6 +262,12 @@ export async function POST(request: Request) {
         }
         const pay = optInt(sub.pay)
         const achievements = Array.isArray(sub.achievements) ? (sub.achievements as unknown[]).filter((x) => typeof x === 'string') : []
+        // A2 — per-subject "relevant experience" list (stored as jsonb).
+        const experience = Array.isArray(sub.experiences)
+          ? sub.experiences
+          : Array.isArray(sub.experience)
+            ? sub.experience
+            : null
         return {
           subcategory_id: id,
           years_experience: parseYears(sub.years),
@@ -242,21 +276,31 @@ export async function POST(request: Request) {
           achievements: achievements.length ? { en: achievements.join('; '), zh: '' } : null,
           qualifications: sub.qualifications ?? null,
           exam_results: sub.exam_results ?? null,
+          experience,
         }
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
+
+    // A1 — teaching levels (keep only valid 6-value levels).
+    const teaching_levels = Array.isArray(t.levels)
+      ? [...new Set((t.levels as unknown[]).filter((x): x is string => typeof x === 'string' && VALID_LEVELS.has(x)))]
+      : []
+    // A3 — education history (object keyed by level) + current studies (array).
+    const education = t.education && typeof t.education === 'object' && !Array.isArray(t.education) ? t.education : null
+    const current_studies = Array.isArray(t.current_studies) ? t.current_studies : null
 
     resolved.tutor = {
       slug: t.slug.trim().toLowerCase(),
       university: typeof t.university === 'string' ? t.university.trim() : null,
       tutoring_format: VALID_FORMATS.has(t.format as string) ? t.format : null,
       tutoring_type: VALID_TYPES.has(t.type as string) ? t.type : null,
+      teaching_levels,
+      education,
+      current_studies,
       subjects,
       languages: mapTutorLanguages(t.languages),
       availability: (t.availability as Avail) ?? {},
     }
-    // Remaining tutor fields still have no DB home — report rather than silently drop.
-    skipped.not_persisted_yet.push('tutor teaching levels and the "relevant experience" list (no DB home yet)')
   }
 
   const { error: rpcError } = await supabase.rpc('complete_onboarding', { p_payload: resolved })

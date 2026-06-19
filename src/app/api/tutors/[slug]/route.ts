@@ -7,6 +7,7 @@ const UUID_REGEX =
 
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
 const VALID_TYPES = new Set(['individual', 'group', 'both'])
+const VALID_LEVELS = new Set(['kindergarten', 'primary', 'middle', 'high', 'university', 'adult'])
 
 // Strip a leading "@" and surrounding spaces from an Instagram handle; "" → null
 function normalizeInstagram(handle: string | null | undefined): string | null {
@@ -39,6 +40,9 @@ export async function GET(
       university,
       tutoring_format,
       tutoring_type,
+      teaching_levels,
+      education,
+      current_studies,
       whatsapp_number,
       instagram_handle,
       wechat_id,
@@ -58,6 +62,7 @@ export async function GET(
         achievements,
         qualifications,
         exam_results,
+        experience,
         subcategories (
           id,
           name_en,
@@ -187,6 +192,7 @@ export async function PATCH(
   const {
     bio, bio_zh, university, tutoring_format, tutoring_type,
     whatsapp_number, instagram_handle, wechat_id, is_published,
+    teaching_levels, education, current_studies,
   } =
     body as {
       bio?: string | null
@@ -198,11 +204,15 @@ export async function PATCH(
       instagram_handle?: string | null
       wechat_id?: string | null
       is_published?: boolean
+      teaching_levels?: unknown
+      education?: unknown
+      current_studies?: unknown
     }
 
   const allUndefined = [
     bio, bio_zh, university, tutoring_format, tutoring_type,
     whatsapp_number, instagram_handle, wechat_id, is_published,
+    teaching_levels, education, current_studies,
   ].every((v) => v === undefined)
 
   if (allUndefined) {
@@ -230,6 +240,23 @@ export async function PATCH(
     return NextResponse.json({ error: 'is_published must be true or false' }, { status: 400 })
   }
 
+  // A1 — teaching_levels: an array of the 6 levels, or null to clear.
+  if (teaching_levels !== undefined && teaching_levels !== null) {
+    if (!Array.isArray(teaching_levels) || teaching_levels.some((l) => typeof l !== 'string' || !VALID_LEVELS.has(l))) {
+      return NextResponse.json(
+        { error: 'teaching_levels must be an array of: kindergarten, primary, middle, high, university, adult' },
+        { status: 400 }
+      )
+    }
+  }
+  // A3 — education (object keyed by level) + current_studies (array).
+  if (education !== undefined && education !== null && (typeof education !== 'object' || Array.isArray(education))) {
+    return NextResponse.json({ error: 'education must be an object or null' }, { status: 400 })
+  }
+  if (current_studies !== undefined && current_studies !== null && !Array.isArray(current_studies)) {
+    return NextResponse.json({ error: 'current_studies must be an array or null' }, { status: 400 })
+  }
+
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (bio !== undefined) updates.bio = bio?.trim() ?? null
   if (bio_zh !== undefined) updates.bio_zh = bio_zh?.trim() ?? null
@@ -240,6 +267,9 @@ export async function PATCH(
   if (instagram_handle !== undefined) updates.instagram_handle = normalizeInstagram(instagram_handle)
   if (wechat_id !== undefined) updates.wechat_id = wechat_id?.trim() ?? null
   if (is_published !== undefined) updates.is_published = is_published
+  if (teaching_levels !== undefined) updates.teaching_levels = teaching_levels === null ? null : [...new Set(teaching_levels as string[])]
+  if (education !== undefined) updates.education = education ?? null
+  if (current_studies !== undefined) updates.current_studies = current_studies ?? null
 
   // RLS "tutor_profiles: owner update" (USING auth.uid() = id) enforces ownership at DB layer
   const { data: tutorProfile, error: updateError } = await supabase
