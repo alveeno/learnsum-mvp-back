@@ -57,7 +57,7 @@ Always begin with:
 Update this section as you complete each step.
 
 > **Backend endpoints: COMPLETE** (all built, tested live, committed on `main`; migrations
-> `0004`–`0013` applied to live Supabase). Covers auth + **social login** (Google/Microsoft/Apple),
+> `0004`–`0016` applied to live Supabase). Covers auth + **social login** (Google/Microsoft/Apple),
 > one-shot onboarding, tutor browse/profile/posts, categories, precise-range availability,
 > the weighted matching feed, saved filters, **file uploads** (avatars/post media), full
 > profile/preference editing, **parent children CRUD**, tutor subjects/languages editing, and

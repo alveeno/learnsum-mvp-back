@@ -77,9 +77,9 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`, `0012_oauth_role_default.sql`, `0013_delete_own_account.sql`, `0014_tutor_profile_extras.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS), 0012 (OAuth-tolerant new-user trigger), 0013 (self-service account deletion), 0014 (tutor profile extras — teaching levels, per-subject experience, education history, `lgbt` gender).
-> **All schema migrations are now written and applied (0004–0014).**
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`, `0012_oauth_role_default.sql`, `0013_delete_own_account.sql`, `0014_tutor_profile_extras.sql`, `0015_seed_taxonomy.sql`, `0016_tutor_subcategory_format_districts.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS), 0012 (OAuth-tolerant new-user trigger), 0013 (self-service account deletion), 0014 (tutor profile extras — teaching levels, per-subject experience, education history, `lgbt` gender), 0015 (reseed taxonomy to mirror the app's subject slugs — destructive), 0016 (per-subject lesson format + districts).
+> **All schema migrations are now written and applied (0004–0016).**
 
 ### 4.1 Auth & Core Profiles
 
@@ -181,11 +181,11 @@ name_zh      text
 slug         text  UNIQUE
 ```
 
-> **Frontend mismatch (TODO):** onboarding currently uses **hardcoded string slugs**
-> (`"sports"`, `"basketball"`, plus user-typed `custom-…`) and never calls
-> `/api/categories`. For matching to work, onboarding selections must be mapped to real
-> `subcategories.id` UUIDs (either seed the DB to match the frontend slugs, or have the
-> app fetch `/api/categories`). User-typed custom subjects need a capture strategy.
+> **Frontend mismatch — RESOLVED (0015):** the `categories`/`subcategories` taxonomy is
+> **seeded to mirror the frontend's hardcoded slugs** (`"sports"`, `"basketball"`, … —
+> frontend = source of truth), so `/api/onboarding` maps each subject by slug with nothing
+> dropped. `0015` is **destructive** (drops + recreates the taxonomy, cascading to existing
+> subject links — fine pre-launch). User-typed **custom** subjects still need a capture strategy.
 
 **Interest junction tables** — drive feed matching
 ```
@@ -205,6 +205,9 @@ hourly_rate_max     int    HKD
 achievements        jsonb  {"en": "...", "zh": "..."}   — collected in onboarding
 qualifications      jsonb  {"en": "...", "zh": "..."}   — collected in onboarding
 exam_results        jsonb  {"en": "HKDSE Maths 5**", "zh": "..."} — collected in onboarding
+experience          jsonb  array of "relevant experience" entries  — 0014
+format              tutoring_format  per-subject lesson format       — 0016
+districts           hk_district[]    per-subject (in_person/both)    — 0016
 ```
 > **Changed:** `achievements` / `qualifications` / `exam_results` are now **collected in onboarding**
 > (the tutor "Strengths & Details" screen already collects them). The onboarding also
@@ -599,6 +602,9 @@ tutors (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC
   the 5 named factors carry the rest of the score.
 - **DONE (migration 0008):** real time-overlap availability, **price** as its own weighted
   dimension, and the reordered weights (40/25/15/10/7/3, subject→district).
+- **TODO (per-subject format/districts):** matching reads the tutor-**level** `tutoring_format`
+  + home `district`. The app now also stores **per-subject** `format`/`districts` (migration
+  `0016`); rework `match_tutors_for_seeker` to score on the per-subject values.
 
 ---
 
@@ -644,6 +650,7 @@ No launch deadline — everything below is intended for build at some point, in 
 - [ ] Align `saved_filter_preferences.preferred_langs` to the expanded lowercase language set (0010).
 - [ ] Make the multi-step edit writes (profile / children / tutor subjects+languages) transactional.
 - [ ] Extend `GET /api/tutors` browse filters to the full set (languages, districts, etc.).
+- [ ] Use **per-subject** `format`/`districts` (migration 0016) in matching/search — stored only today; the matching RPC still reads the tutor-level format + home district.
 - [ ] Add an automated integration test suite (today verification is live `curl`).
 
 ---
@@ -682,7 +689,7 @@ exact store keys and field shapes):
   child** (name, `school_level`); per-child interests → `child_category_interests`; per-child
   preferences + availability.
 - **Tutor:** `tutor_profiles` (`slug`, `university`, format/type, **is_published = false**);
-  teaching levels; subjects → `tutor_subcategories` (years, pay, achievements,
+  teaching levels; subjects → `tutor_subcategories` (years, pay, **per-subject format + districts**, achievements,
   qualifications, experience); teaching languages + proficiency; availability ranges.
   Contact details (WhatsApp/Instagram/WeChat) + bio + photo are completed on the post-
   onboarding "complete your profile" screen, then the tutor publishes.

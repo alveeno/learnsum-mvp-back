@@ -17,9 +17,10 @@ project of its own). **Depends on** = can't be built until that other gap is.
 ---
 
 > ✅ **Group A (A1–A5) is now BUILT and LIVE** — migration `0014_tutor_profile_extras.sql`
-> (applied to Supabase) + updates to `/api/onboarding`, `/api/tutor/subjects`, and
-> `/api/tutors/[slug]`. The frontend still needs to start *sending* these fields (it doesn't
-> yet) — see `FRONTEND_WIRING.md`.
+> (applied) + updates to `/api/onboarding`, `/api/tutor/subjects`, and `/api/tutors/[slug]`.
+> **Also built since** (during frontend wiring): `0015` (taxonomy reseeded to mirror the app's
+> subject slugs) and `0016` (per-subject lesson `format`/`districts` — stored now; **TODO:** use
+> it in matching). Frontend wiring of all this is underway — see `FRONTEND_WIRING.md`.
 
 ## Summary table (my recommendation — you decide)
 

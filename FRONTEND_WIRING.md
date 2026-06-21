@@ -86,7 +86,7 @@ or serve. Decide each before wiring the affected screen:
 |---|---|---|
 | **Teaching levels** + **education history** + **per-subject experience** | ✅ **Now stored** (migration 0014): `tutor_profiles.teaching_levels` / `education` / `current_studies`, `tutor_subcategories.experience`. | Done — the app just needs to *send* them (see §3.3). |
 | **Gender `lgbtq`/`na`, first/last name** | ✅ **Now handled** (0014 + `/api/onboarding`): `lgbtq`→`lgbt`, `na`→prefer-not-to-say, first+last→`full_name`. | Done — just send them. |
-| **Subject slugs ↔ database** | Onboarding maps the app's subject words (e.g. `"mathematics"`) to database IDs. If the app's hardcoded words don't match the seeded database words, the subject is silently skipped. | Either seed the database to match the app's words, **or** have the app fetch `GET /api/categories` and use the real IDs. |
+| **Subject slugs ↔ database** | ✅ **Resolved (migration 0015):** the database taxonomy is seeded to mirror the app's subject slugs (frontend = source of truth), so onboarding maps every subject by slug. | Done — to add subjects later, update the app **and** re-seed (or have the app fetch `GET /api/categories`). |
 | **Chat tab** | Backend chat is built but **switched off** (TODO). | Leave the tab as "coming soon" until you turn chat on. |
 | **Analytics tab (padlock)** | **No analytics in the backend at all.** | Keep as a placeholder. |
 | **Stories / "Your story" circles** | Backend stores *posts*, not 24-hour *stories*. | Treat circles as decorative, or repurpose them to show posts. |
@@ -138,7 +138,7 @@ This is the heart of it. **Credentials come first (all roles):**
     "education": { "university": [{ "institution": "HKU", "qualification": "BSc", "score": "First" }] },
     "current_studies": [{ "institution": "HKU", "programme": "MPhil" }],
     "subjects": [
-      { "subcategory": "mathematics", "years": "5", "pay": 350,
+      { "subcategory": "mathematics", "years": "5", "pay": 350, "format": "in_person", "districts": ["CentralWestern"],
         "achievements": ["..."], "qualifications": {...}, "exam_results": {...},
         "experiences": [{ "text": "...", "kind": "duration", "dur": "2", "unit": "years", "ongoing": true }] }
     ],
