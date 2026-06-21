@@ -21,6 +21,11 @@ project of its own). **Depends on** = can't be built until that other gap is.
 > **Also built since** (during frontend wiring): `0015` (taxonomy reseeded to mirror the app's
 > subject slugs) and `0016` (per-subject lesson `format`/`districts` — stored now; **TODO:** use
 > it in matching). Frontend wiring of all this is underway — see `FRONTEND_WIRING.md`.
+>
+> **Found during wiring (recorded in `plan.md §7`):** (1) the subject *edit* endpoint
+> `PUT /api/tutor/subjects` still expects `{en,zh}` objects, but the app sends arrays for
+> `achievements`/`qualifications` — editing subjects would reject them; (2) `tutoring_type`
+> (individual/group) isn't collected by the app, so it's stored null.
 
 ## Summary table (my recommendation — you decide)
 

@@ -138,7 +138,7 @@ This is the heart of it. **Credentials come first (all roles):**
     "education": { "university": [{ "institution": "HKU", "qualification": "BSc", "score": "First" }] },
     "current_studies": [{ "institution": "HKU", "programme": "MPhil" }],
     "subjects": [
-      { "subcategory": "mathematics", "years": "5", "pay": 350, "format": "in_person", "districts": ["CentralWestern"],
+      { "subcategory": "mathematics", "years": "5", "pay": 350, "format": "in_person", "districts": ["hk:Central & Western"],
         "achievements": ["..."], "qualifications": {...}, "exam_results": {...},
         "experiences": [{ "text": "...", "kind": "duration", "dur": "2", "unit": "years", "ongoing": true }] }
     ],

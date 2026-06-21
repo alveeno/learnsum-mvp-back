@@ -50,7 +50,7 @@ Every role can edit its onboarding preferences from the profile screen and **del
 
 ### Bilingual content strategy
 - System content (categories): parallel `name_en` / `name_zh` columns — pre-seeded and finite.
-- Tutor free-text fields (`achievements`, `qualifications`, `exam_results` on `tutor_subcategories`): `jsonb` `{"en": "...", "zh": "..."}`.
+- Tutor free-text fields on `tutor_subcategories` (`jsonb`): `achievements` is stored `{"en": "...", "zh": "..."}`; **`qualifications` is the app's structured array** and **`exam_results` is unused** (the app folds exam grades into `qualifications`). *(The `{en,zh}` convention + the `PUT /api/tutor/subjects` validator don't match the app's actual shapes — see `plan.md §7` TODO.)*
 - User-generated posts: parallel `content` / `content_zh` columns.
 
 ### Denormalized counters require triggers
