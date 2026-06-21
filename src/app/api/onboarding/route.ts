@@ -268,6 +268,11 @@ export async function POST(request: Request) {
           : Array.isArray(sub.experience)
             ? sub.experience
             : null
+        // 0016 — per-subject lesson format + districts (the app collects these
+        // per subject). Districts only apply to in_person / both; map labels →
+        // enum codes the same way as seekers'.
+        const format = VALID_FORMATS.has(sub.format as string) ? (sub.format as string) : null
+        const districts = format === 'online' ? [] : mapDistricts(sub.districts, skipped)
         return {
           subcategory_id: id,
           years_experience: parseYears(sub.years),
@@ -277,6 +282,8 @@ export async function POST(request: Request) {
           qualifications: sub.qualifications ?? null,
           exam_results: sub.exam_results ?? null,
           experience,
+          format,
+          districts,
         }
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
