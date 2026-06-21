@@ -651,7 +651,7 @@ No launch deadline — everything below is intended for build at some point, in 
 - [ ] Make the multi-step edit writes (profile / children / tutor subjects+languages) transactional.
 - [ ] Extend `GET /api/tutors` browse filters to the full set (languages, districts, etc.).
 - [ ] Use **per-subject** `format`/`districts` (migration 0016) in matching/search — stored only today; the matching RPC still reads the tutor-level format + home district.
-- [ ] **Reconcile subject-detail shapes:** `PUT /api/tutor/subjects` still requires `{en,zh}` objects for `achievements`/`qualifications`/`exam_results`, but the app actually sends `achievements: string[]`, `qualifications: <structured array>`, `exam_results: null` (onboarding accepts these; the edit endpoint would reject them). Make the edit endpoint accept the app's shapes (or transform in the app) before subject-editing is wired.
+- [x] **Reconcile subject-detail shapes:** `PUT /api/tutor/subjects` now accepts array `qualifications`/`exam_results` (the app sends `achievements: {en,zh}`, `qualifications: <structured array>`, `exam_results: null`) AND persists per-subject `format` + `districts` (it had neither). Also `PATCH /api/profiles/me` now accepts the `lgbt` gender. Done as part of wiring the Profile "Change preferences" edit save (frontend `components/tutor/tutorEditStore.ts`).
 - [ ] **`tutoring_type` (individual/group) is not collected** by the app → stored null, so the matching tie-breaker on type is always neutral. Decide: collect it in the app, or drop it from matching.
 - [ ] Add an automated integration test suite (today verification is live `curl`).
 

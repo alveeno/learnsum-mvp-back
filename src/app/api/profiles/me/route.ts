@@ -30,7 +30,9 @@ const VALID_PREFERRED_LANGUAGE = new Set(['english', 'cantonese', 'mandarin'])
 const VALID_LEVELS = new Set(['kindergarten', 'primary', 'middle', 'high', 'university', 'adult'])
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
 const VALID_TYPES = new Set(['individual', 'group', 'both'])
-const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer_not_to_say'])
+// gender_type enum (incl. 'lgbt', added in migration 0014) — must accept every
+// value onboarding can store, so editing a profile can't reject its own gender.
+const VALID_GENDERS = new Set(['male', 'female', 'lgbt', 'other', 'prefer_not_to_say'])
 
 // Normalize a language list to unique lowercase tokens (expanded set is open-ended).
 function normLanguages(input: unknown): string[] {

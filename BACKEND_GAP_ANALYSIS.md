@@ -22,9 +22,12 @@ project of its own). **Depends on** = can't be built until that other gap is.
 > subject slugs) and `0016` (per-subject lesson `format`/`districts` — stored now; **TODO:** use
 > it in matching). Frontend wiring of all this is underway — see `FRONTEND_WIRING.md`.
 >
-> **Found during wiring (recorded in `plan.md §7`):** (1) the subject *edit* endpoint
+> **Found during wiring (recorded in `plan.md §7`):** (1) ~~the subject *edit* endpoint
 > `PUT /api/tutor/subjects` still expects `{en,zh}` objects, but the app sends arrays for
-> `achievements`/`qualifications` — editing subjects would reject them; (2) `tutoring_type`
+> `achievements`/`qualifications` — editing subjects would reject them~~ **FIXED** (profile-edit
+> wiring): `PUT /api/tutor/subjects` now accepts array `qualifications`/`exam_results` AND persists
+> per-subject `format` + `districts` (it had neither), and `PATCH /api/profiles/me` now accepts the
+> `lgbt` gender — so the Profile "Change preferences" edit save is lossless; (2) `tutoring_type`
 > (individual/group) isn't collected by the app, so it's stored null.
 
 ## Summary table (my recommendation — you decide)

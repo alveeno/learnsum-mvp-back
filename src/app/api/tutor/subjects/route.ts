@@ -11,6 +11,17 @@ import { createClient } from '@/lib/supabase/server'
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+// Per-subject lesson format + districts (columns added in migration 0016). The
+// Expo app collects these PER SUBJECT, so the edit path must persist them too —
+// otherwise editing a subject would drop its in-person/online + district info.
+const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
+const VALID_DISTRICTS = new Set([
+  'CentralWestern', 'WanChai', 'Eastern', 'Southern',
+  'YauTsimMong', 'ShamshuiPo', 'KowloonCity', 'WongTaiSin', 'KwunTong',
+  'KwaiTsing', 'TsuenWan', 'TuenMun', 'YuenLong', 'North', 'TaiPo',
+  'SaiKung', 'ShaTin', 'Islands',
+])
+
 async function requireTutor(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
     data: { user },
@@ -61,6 +72,45 @@ function parseJsonb(v: unknown, field: string): { value: unknown } | { error: st
   return { value: v }
 }
 
+// jsonb passthrough that ALSO accepts an array — the app's qualifications /
+// exam_results are arrays of structured entries (matching what onboarding's
+// complete_onboarding() stores). Object or array or null.
+function parseJsonbOrArray(v: unknown, field: string): { value: unknown } | { error: string } {
+  if (v === undefined || v === null) return { value: null }
+  if (typeof v !== 'object') {
+    return { error: `${field} must be an object, an array, or null` }
+  }
+  return { value: v }
+}
+
+// Per-subject lesson format → tutoring_format enum (or null).
+function parseFormat(v: unknown): { value: string | null } | { error: string } {
+  if (v === undefined || v === null) return { value: null }
+  if (typeof v !== 'string' || !VALID_FORMATS.has(v)) {
+    return { error: 'format must be one of: online, in_person, both (or null)' }
+  }
+  return { value: v }
+}
+
+// Per-subject districts → hk_district[] (enum codes). Online subjects carry no
+// districts, so they are dropped to [] to mirror the onboarding write.
+function parseDistricts(
+  v: unknown,
+  format: string | null
+): { value: string[] } | { error: string } {
+  if (v === undefined || v === null) return { value: [] }
+  if (!Array.isArray(v)) return { error: 'districts must be an array of district codes' }
+  if (format === 'online') return { value: [] }
+  const out: string[] = []
+  for (const d of v) {
+    if (typeof d !== 'string' || !VALID_DISTRICTS.has(d)) {
+      return { error: `districts has invalid code: ${String(d)}` }
+    }
+    out.push(d)
+  }
+  return { value: [...new Set(out)] }
+}
+
 type SubjectRow = {
   subcategory_id: string
   years_experience: number | null
@@ -70,6 +120,8 @@ type SubjectRow = {
   qualifications: unknown
   exam_results: unknown
   experience: unknown
+  format: string | null
+  districts: string[]
 }
 
 // Validate + shape the subjects array, deduped by subcategory_id (last wins).
@@ -97,9 +149,9 @@ function buildSubjects(input: unknown): { rows: SubjectRow[] } | { error: string
     }
     const ach = parseJsonb(s.achievements, 'achievements')
     if ('error' in ach) return { error: ach.error }
-    const qual = parseJsonb(s.qualifications, 'qualifications')
+    const qual = parseJsonbOrArray(s.qualifications, 'qualifications')
     if ('error' in qual) return { error: qual.error }
-    const exam = parseJsonb(s.exam_results, 'exam_results')
+    const exam = parseJsonbOrArray(s.exam_results, 'exam_results')
     if ('error' in exam) return { error: exam.error }
     // "relevant experience" list (A2) — an array of entries, or null.
     let experience: unknown = null
@@ -107,6 +159,10 @@ function buildSubjects(input: unknown): { rows: SubjectRow[] } | { error: string
       if (!Array.isArray(s.experience)) return { error: 'experience must be an array or null' }
       experience = s.experience
     }
+    const fmt = parseFormat(s.format)
+    if ('error' in fmt) return { error: fmt.error }
+    const districts = parseDistricts(s.districts, fmt.value)
+    if ('error' in districts) return { error: districts.error }
 
     byId.set(s.subcategory_id, {
       subcategory_id: s.subcategory_id,
@@ -117,6 +173,8 @@ function buildSubjects(input: unknown): { rows: SubjectRow[] } | { error: string
       qualifications: qual.value,
       exam_results: exam.value,
       experience,
+      format: fmt.value,
+      districts: districts.value,
     })
   }
   return { rows: [...byId.values()] }
@@ -134,7 +192,7 @@ export async function GET() {
     .from('tutor_subcategories')
     .select(
       `id, subcategory_id, years_experience, hourly_rate_min, hourly_rate_max,
-       achievements, qualifications, exam_results, experience,
+       achievements, qualifications, exam_results, experience, format, districts,
        subcategories ( id, name_en, name_zh, slug )`
     )
     .eq('tutor_id', user.id)
