@@ -63,6 +63,8 @@ export async function GET(
         qualifications,
         exam_results,
         experience,
+        format,
+        districts,
         subcategories (
           id,
           name_en,

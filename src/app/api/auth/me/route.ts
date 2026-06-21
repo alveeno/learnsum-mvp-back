@@ -83,8 +83,8 @@ export async function GET() {
       .from('tutor_subcategories')
       .select(
         `id, subcategory_id, years_experience, hourly_rate_min, hourly_rate_max,
-         achievements, qualifications, exam_results,
-         subcategories ( id, name_en, name_zh, slug )`
+         achievements, qualifications, exam_results, experience, format, districts,
+         subcategories ( id, name_en, name_zh, slug, categories ( id, name_en, name_zh, slug ) )`
       )
       .eq('tutor_id', user.id)
     const { data: languages } = await supabase
