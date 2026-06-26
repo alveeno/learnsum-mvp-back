@@ -30,6 +30,20 @@ project of its own). **Depends on** = can't be built until that other gap is.
 > `lgbt` gender — so the Profile "Change preferences" edit save is lossless; (2) `tutoring_type`
 > (individual/group) isn't collected by the app, so it's stored null.
 
+---
+
+> 🗓️ **Update (Jun 25) — the frontend moved well past this doc.** Since it was written, the frontend
+> built the **seeker (student/parent) app shell** (`/feed`: an Instagram-style **post feed**, Search +
+> Quick Match, Saved, Account — all **sample data**), a real public **`/tutors/[slug]`** route (reuses
+> the existing `GET /api/tutors/[slug]` — **no new gap**), the **student/parent final account step**
+> (`CreateAccount` → `POST /api/onboarding`), plus sound effects and a tutor logout button (no backend).
+> New/changed gaps are collected in **Group H** below.
+>
+> **Key correction:** `POST /api/onboarding` **already fully supports `student` and `parent`** (it
+> branches by role and writes via the `complete_onboarding` RPC, migration 0009) — so seeker onboarding
+> is a **frontend payload-shape fix (H1), NOT a backend gap.** Also **Instagram was dropped** from
+> contact (WhatsApp + WeChat only) — any "IG" mention below is stale.
+
 ## Summary table (my recommendation — you decide)
 
 | # | Gap | My rec | Effort | Your call |
@@ -62,6 +76,11 @@ project of its own). **Depends on** = can't be built until that other gap is.
 | F1 | Activity feed / notifications | ❌ Skip (already out) | L | ☐ |
 | **G. Minor shape mismatches** | | | | |
 | G1 | Post kinds `whiteboard`/`quote` vs `image`/`video` | ❌ Skip | S | ☐ |
+| **H. Seeker (student/parent) app — new since this doc (Jun 25)** | | | | |
+| H1 | Student/parent onboarding persistence (backend already supports it; frontend payload was wrong) | ✅ Frontend fix | S | ✅ **DONE** (frontend; verify e2e) |
+| H2 | Seeker **post-feed** endpoint (Home shows a post stream; `/api/feed` returns tutor cards) | 🕓 Decide | M | ☐ |
+| H3 | **Saved / bookmarked tutors** (Saved tab; in-memory) | 🕓 Defer | S | ☐ |
+| H4 | Seeker **saved search filters** (device-local today) | ❌ Skip / optional | S | ☐ |
 
 ---
 
@@ -125,7 +144,7 @@ keep them.
 - **Backend:** `conversations`/`messages` + endpoints **exist but are dormant**, no
   real-time.
 - **Why defer:** it's built but switched off by choice. Turn on when you want messaging
-  to be real — your call on timing. (Until then, contact stays WhatsApp/IG/WeChat.)
+  to be real — your call on timing. (Until then, contact stays WhatsApp + WeChat.)
 
 ---
 
@@ -220,6 +239,53 @@ add the remaining real filters (price range, district multi, mode, subject).
 - **Backend:** `post_media.media_type` is `image`/`video`; `post_type` is
   `update`/`showcase`/`result`.
 - **Fix:** map `whiteboard`→image and `quote`→a text post, or ignore — purely cosmetic.
+
+---
+
+## H. Seeker (student/parent) app — new since this doc (Jun 25)
+
+The frontend's `/feed` is no longer a placeholder — it's a 4-tab seeker shell (Home post-feed /
+Search + Quick Match / Saved / Account), built front-end-only with **sample data** (it reuses the
+tutor prototype's `tutorData.ts`). As with the tutor-home shell, "on screen" ≠ "a committed product
+feature" — these are the decisions.
+
+### H1 — Student/parent onboarding persistence  ·  ✅ Frontend fix — DONE (S)
+- **Status:** ✅ **Fixed on the frontend** (`seekerOnboardingPayload.ts`). The `CreateAccount` step
+  creates the account and then `POST /api/onboarding` saves the answers — now in the correct shape, so
+  on success it **persists with no backend change**. *(Still worth one real end-to-end test against the
+  live backend — sign up a new student, complete onboarding, confirm the rows land.)*
+- **What was wrong (NOT a backend gap):** `POST /api/onboarding` already handles `student` and `parent`
+  in full (writes prefs + interests + availability, and for parents the child rows, via
+  `complete_onboarding`). The frontend payload had the **wrong shape**, so the (best-effort) save
+  silently failed. Corrected:
+  - `education_level` → **`school_level`**.
+  - `interests` were objects `{subcategory, category, label}` → now an array of subject **slug strings**
+    (e.g. `["mathematics", "basketball"]` — slugs match since migration 0015).
+  - parent payload nested top-level `children` → now **`parent: { searching_for_self, children: [...] }`**.
+- *(Budget isn't collected in seeker onboarding, so `budget_max_per_hour` stays null — fine.)*
+
+### H2 — Seeker post-feed endpoint  ·  🕓 Decide (M)
+- **Frontend:** the seeker **Home** tab is an Instagram-style stream of tutor **posts** (sample data).
+- **Backend:** `GET /api/feed` returns **tutor cards** (display name / subjects / district, either
+  personalized via `match_tutors_for_seeker` or latest-first), **not** a stream of posts. No cross-tutor
+  post-stream endpoint exists.
+- **Decision:** either (a) build a post-stream feed (aggregate published tutors' posts), or (b) make the
+  seeker Home a **tutor-card** feed off the existing `/api/feed` and keep post browsing on each tutor's
+  profile. My lean: **(b)** for now — `/api/feed` already exists with real matching, a post-stream is a
+  bigger build, and the post-feed is the deferred browse surface.
+
+### H3 — Saved / bookmarked tutors  ·  🕓 Defer (S)
+- **Frontend:** a **Saved** tab bookmarks tutors (in-memory, session-only via a small store).
+- **Backend:** no saved/bookmarks table or endpoint.
+- **Why defer:** nice-to-have; cheap when wanted (a `saved_tutors` table + save/unsave/list endpoints).
+  Until then it's session-only on the device.
+
+### H4 — Seeker saved search filters  ·  ❌ Skip / optional (S)
+- **Frontend:** the Search tab's advanced filters now persist across restarts via **AsyncStorage**
+  (device-local) — no backend needed.
+- **Backend:** a `/api/filters` route already exists if you ever want filters synced across devices.
+- **Why skip:** device-local is fine for a single-device user; only wire it to the backend if
+  cross-device sync becomes a goal.
 
 ---
 
