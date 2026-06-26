@@ -77,7 +77,7 @@ project of its own). **Depends on** = can't be built until that other gap is.
 | **G. Minor shape mismatches** | | | | |
 | G1 | Post kinds `whiteboard`/`quote` vs `image`/`video` | ❌ Skip | S | ☐ |
 | **H. Seeker (student/parent) app — new since this doc (Jun 25)** | | | | |
-| H1 | Student/parent onboarding persistence (backend already supports it; frontend payload was wrong) | ✅ Frontend fix | S | ✅ **DONE** (frontend; verify e2e) |
+| H1 | Student/parent onboarding persistence (backend already supported it; frontend payload was wrong) | ✅ Frontend fix | S | ✅ **DONE + verified e2e** |
 | H2 | Seeker **post-feed** endpoint (Home shows a post stream; `/api/feed` returns tutor cards) | 🕓 Decide | M | ☐ |
 | H3 | **Saved / bookmarked tutors** (Saved tab; in-memory) | 🕓 Defer | S | ☐ |
 | H4 | Seeker **saved search filters** (device-local today) | ❌ Skip / optional | S | ☐ |
@@ -249,11 +249,11 @@ Search + Quick Match / Saved / Account), built front-end-only with **sample data
 tutor prototype's `tutorData.ts`). As with the tutor-home shell, "on screen" ≠ "a committed product
 feature" — these are the decisions.
 
-### H1 — Student/parent onboarding persistence  ·  ✅ Frontend fix — DONE (S)
-- **Status:** ✅ **Fixed on the frontend** (`seekerOnboardingPayload.ts`). The `CreateAccount` step
-  creates the account and then `POST /api/onboarding` saves the answers — now in the correct shape, so
-  on success it **persists with no backend change**. *(Still worth one real end-to-end test against the
-  live backend — sign up a new student, complete onboarding, confirm the rows land.)*
+### H1 — Student/parent onboarding persistence  ·  ✅ Frontend fix — DONE + verified (S)
+- **Status:** ✅ **Fixed on the frontend** (`seekerOnboardingPayload.ts`) **and verified end-to-end
+  (2026-06-26)** — a fresh student/parent signup completes onboarding and the rows land in the DB. The
+  `CreateAccount` step creates the account and `POST /api/onboarding` saves the answers in the correct
+  shape, **with no backend change**.
 - **What was wrong (NOT a backend gap):** `POST /api/onboarding` already handles `student` and `parent`
   in full (writes prefs + interests + availability, and for parents the child rows, via
   `complete_onboarding`). The frontend payload had the **wrong shape**, so the (best-effort) save
