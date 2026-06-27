@@ -31,11 +31,12 @@ it's proven:
 8. **Posts — view then create** (§3.6) — `GET`/`POST /api/tutors/[slug]/posts` (+ `POST /api/upload`).
 
 **🟡 Tier 2 — wire right after** (the loop works without them): profile editing + account
-deletion (§3.8), search + real filters (§3.7), saved filters, likes.
+deletion (§3.8). ✅ **Done (Jun 26):** seeker **search + real filters**, **saved tutors**, and post
+**likes** (§3.7).
 
-**⚪ Tier 3 — leave as mock / don't wire** (no backend, or deferred): Chat, Analytics,
+**⚪ Tier 3 — leave as mock / don't wire** (no backend, or deferred): Analytics,
 Premium/payments, Stories, "Tutors you may know", Qualified badge, followers/ratings filters,
-notifications. (See `BACKEND_GAP_ANALYSIS.md`.)
+notifications. (See `BACKEND_GAP_ANALYSIS.md`.) *(Chat moved to ✅ wired — Jun 27.)*
 
 The day Tier 1 works end-to-end you have a real, functioning marketplace — even with every
 Tier-2/3 screen still on mock data. That's the milestone.
@@ -87,7 +88,7 @@ or serve. Decide each before wiring the affected screen:
 | **Teaching levels** + **education history** + **per-subject experience** | ✅ **Now stored** (migration 0014): `tutor_profiles.teaching_levels` / `education` / `current_studies`, `tutor_subcategories.experience`. | Done — the app just needs to *send* them (see §3.3). |
 | **Gender `lgbtq`/`na`, first/last name** | ✅ **Now handled** (0014 + `/api/onboarding`): `lgbtq`→`lgbt`, `na`→prefer-not-to-say, first+last→`full_name`. | Done — just send them. |
 | **Subject slugs ↔ database** | ✅ **Resolved (migration 0015):** the database taxonomy is seeded to mirror the app's subject slugs (frontend = source of truth), so onboarding maps every subject by slug. | Done — to add subjects later, update the app **and** re-seed (or have the app fetch `GET /api/categories`). |
-| **Chat tab** | Backend chat is built but **switched off** (TODO). | Leave the tab as "coming soon" until you turn chat on. |
+| **Chat tab** | ✅ **Wired (Jun 27)** — real conversations over REST **polling** (the app has no live connection). Reachable from the tutor **Chat tab**, the seeker **Account → Messages**, and a **Message** button on each tutor profile. | Done. Upgrade to instant Realtime later by adding the Supabase client. |
 | **Analytics tab (padlock)** | **No analytics in the backend at all.** | Keep as a placeholder. |
 | **Stories / "Your story" circles** | Backend stores *posts*, not 24-hour *stories*. | Treat circles as decorative, or repurpose them to show posts. |
 | **"Qualified" badge** | **No verification system** (TODO). | Cosmetic/hardcoded for now. |
@@ -178,11 +179,26 @@ This is the heart of it. **Credentials come first (all roles):**
 - **View:** `GET /api/tutors/<slug>/posts` (public, paginated).
 - **Delete own:** `DELETE /api/posts/<id>`.
 
-### 3.7 Search / browse + viewing another tutor
-- **Browse / Search tab:** `GET /api/tutors?subcategory_id=&district=&min_rate=&…`.
+### 3.7 Search / browse + viewing another tutor  ✅ **both Search tabs wired (seeker Jun 26, tutor Jun 27)**
+- **Browse / Search tab:** `GET /api/tutors?subcategory_id=&district=&tutoring_format=&tutoring_type=&min_rate=&max_rate=&min_age=&max_age=&gender=&language=`.
+  - **Both** the seeker and tutor **Search** tabs are now real: the FilterSheet's price/age/lesson-mode/
+    district/gender map to these params (district **labels → enum codes**; `gender`/`district`/`language`
+    accept comma-separated lists → match ANY). There's **no free-text search** on the backend, so the typed
+    query narrows the fetched cards on the device. Rating/years/sessions/followers have no backend filter —
+    hidden in both sheets. A tutor only appears once **published**.
 - **Tap a tutor:** `GET /api/tutors/<slug>` → full profile + their posts + contact
-  buttons. The **WhatsApp/Instagram/WeChat** buttons just open those apps with the
+  buttons. The **WhatsApp/WeChat** buttons just open those apps with the
   saved number/handle — no backend call needed to "contact".
+- **Save / bookmark a tutor:** ✅ **wired** — `GET`/`POST /api/saved`, `DELETE /api/saved/<slug|id>`
+  (the Saved tab). Saving a tutor that isn't published / doesn't exist returns 404 (sample Home tutors).
+- **Like a post:** ✅ **wired** on the tutor profile's post feed — `POST`/`DELETE /api/posts/<id>/likes`;
+  the posts list (`GET /api/tutors/<slug>/posts`) returns `liked_by_me` for the initial heart state.
+- **Message a tutor:** ✅ **wired** — a **Message** button on the real tutor profile calls
+  `POST /api/conversations` then opens the thread. Works from both the seeker and tutor sides (a tutor's
+  Search → a real tutor → Message), so **tutor↔tutor and seeker→tutor** chat both work.
+
+> **Still sample data (deferred):** only the seeker **Home** feed + its like/save buttons (the H2
+> "leave Home as-is" call). Both Search tabs, Saved, the profile post-feed likes, and chat are real.
 
 ### 3.8 Profile & account editing (Profile tab)
 - **Load current values:** `GET /api/auth/me` → `{ user, profile, detail }`.
@@ -205,7 +221,7 @@ Two-step, because files are big:
 |---|---|---|
 | **Home** | `GET /api/feed` | ✅ yes |
 | **Search** | `GET /api/tutors` | ✅ yes |
-| **Chat** | built but **switched off** (TODO) | ⏸ leave as placeholder |
+| **Chat** | `GET/POST /api/conversations` + messages (REST polling) | ✅ **wired** |
 | **Analytics** | **doesn't exist** | ⏸ placeholder |
 | **Profile** | `GET /api/auth/me` + edit endpoints | ✅ yes |
 
@@ -234,9 +250,12 @@ Two-step, because files are big:
 | Children (parent) | `/api/children` · `/api/children/<id>` |
 | Saved filters | `GET/PUT /api/filters` |
 | Posts | `GET/POST /api/tutors/<slug>/posts` · `DELETE /api/posts/<id>` |
+| Like / unlike a post | `GET/POST/DELETE /api/posts/<id>/likes` |
+| Saved / bookmarked tutors | `GET/POST /api/saved` · `DELETE /api/saved/<slug\|id>` |
 | Upload media | `POST /api/upload` |
+| In-app chat ✅ wired (REST polling) | `GET/POST /api/conversations` · `GET/POST/PATCH /api/conversations/<id>/messages` |
 
-*(Dormant, not wired: `/api/conversations*` chat, `/api/tutors/<slug>/inquiries`.)*
+*(Dormant, not wired: `/api/tutors/<slug>/inquiries`.)*
 
 ---
 

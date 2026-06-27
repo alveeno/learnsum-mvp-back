@@ -273,6 +273,11 @@ export async function POST(request: Request) {
         // enum codes the same way as seekers'.
         const format = VALID_FORMATS.has(sub.format as string) ? (sub.format as string) : null
         const districts = format === 'online' ? [] : mapDistricts(sub.districts, skipped)
+        // 0020 — per-subject teaching levels (which age groups for THIS subject).
+        // The app's level keys already match the school_level enum; keep valid ones.
+        const levels = Array.isArray(sub.levels)
+          ? [...new Set((sub.levels as unknown[]).filter((x): x is string => typeof x === 'string' && VALID_LEVELS.has(x)))]
+          : []
         return {
           subcategory_id: id,
           years_experience: parseYears(sub.years),
@@ -284,6 +289,7 @@ export async function POST(request: Request) {
           experience,
           format,
           districts,
+          levels,
         }
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)

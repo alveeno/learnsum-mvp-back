@@ -44,6 +44,20 @@ project of its own). **Depends on** = can't be built until that other gap is.
 > is a **frontend payload-shape fix (H1), NOT a backend gap.** Also **Instagram was dropped** from
 > contact (WhatsApp + WeChat only) — any "IG" mention below is stale.
 
+> ✅ **Build round 2 (Jun 26) — BUILT:** **B1** (post likes), **D1/D2/D4** (search filters: age,
+> gender, + multi-district & language on `GET /api/tutors`), **H3** (saved/bookmarked tutors), and the
+> backend half of **B2** (in-app chat: Realtime + read receipts). **H2** decision: **leave seeker Home
+> as-is** for now (no backend change). Migrations `0017_saved_tutors.sql` + `0018_chat_realtime.sql`
+> are **applied** (by you). Per-item status is in each section below; what still needs **frontend wiring**
+> is called out inline and summarised at the bottom. Parked (product decisions): C (follows/stories/
+> ratings/sessions/verification), E (analytics/payments), F (notifications).
+>
+> ✅ **Verified end-to-end (Jun 26):** a 50-check live HTTP suite (likes / filters / saved / chat) all
+> passing against the live DB. **Bug found + fixed during verification:** the `likes_count` counter never
+> moved because the `0001` trigger ran as the liker and RLS `posts: owner update` blocked a non-owner's
+> bump — fixed in **`0019_counter_triggers_security_definer.sql`** (applied). `liked`/`liked_by_me` were
+> always fine; only the denormalized count was stuck.
+
 ## Summary table (my recommendation — you decide)
 
 | # | Gap | My rec | Effort | Your call |
@@ -55,8 +69,8 @@ project of its own). **Depends on** = can't be built until that other gap is.
 | A4 | **Gender** value mismatch (`lgbtq`/`na` vs backend enum) | ✅ Build | S | ✅ **Build** — add `lgbt`, map `na`→prefer_not_to_say |
 | A5 | First/last name vs single `full_name` | ✅ Build | S | ✅ **Build** |
 | **B. Engagement that ALREADY has backend schema (just switch on)** | | | | |
-| B1 | Post **likes** (UI exists; schema+triggers exist) | ✅ Build | S | ☐ |
-| B2 | **In-app chat** (backend built but dormant) | 🕓 Defer | M | ☐ |
+| B1 | Post **likes** (UI exists; schema+triggers exist) | ✅ Build | S | ✅ **DONE** — like/unlike endpoint + `liked_by_me` |
+| B2 | **In-app chat** (backend built but dormant) | 🕓 Defer | M | ✅ **DONE + FE wired** (REST polling; Realtime ready but unused) |
 | **C. Social-graph / vanity features (prototype — are they real?)** | | | | |
 | C1 | **Follows / "Connect" / follower counts** | 🕓 Defer | L | ☐ |
 | C2 | **Stories** (24-hour ephemeral) | ❌ Skip | M | ☐ |
@@ -65,10 +79,10 @@ project of its own). **Depends on** = can't be built until that other gap is.
 | C5 | **"Successful sessions" count** | ❌ Skip | L | ☐ |
 | C6 | **"Qualified" verification badge** | 🕓 Defer | M | ☐ |
 | **D. Search / browse filters** | | | | |
-| D1 | Filter by tutor **age** | ✅ Build | S | ☐ |
-| D2 | Filter by tutor **gender** | ✅ Build | S | ☐ |
+| D1 | Filter by tutor **age** | ✅ Build | S | ✅ **DONE** — `?min_age=&max_age=` |
+| D2 | Filter by tutor **gender** | ✅ Build | S | ✅ **DONE** — `?gender=` (comma-separated; incl. `lgbt`) |
 | D3 | Filters for **rating / years / sessions / followers** | 🕓 Depends on C | M | ☐ |
-| D4 | Extend browse to the **full filter set** (price, district, mode, subject) | ✅ Build | M | ☐ |
+| D4 | Extend browse to the **full filter set** (price, district, mode, subject) | ✅ Build | M | ✅ **DONE** — added `?language=` + multi-`?district=` (price/mode/subject already existed) |
 | **E. Analytics & payments** | | | | |
 | E1 | **Analytics dashboard** (views, reach, who viewed you) | 🕓 Defer | L | ☐ |
 | E2 | **Premium / in-app payments** | 🕓 Defer | L | ☐ |
@@ -78,8 +92,8 @@ project of its own). **Depends on** = can't be built until that other gap is.
 | G1 | Post kinds `whiteboard`/`quote` vs `image`/`video` | ❌ Skip | S | ☐ |
 | **H. Seeker (student/parent) app — new since this doc (Jun 25)** | | | | |
 | H1 | Student/parent onboarding persistence (backend already supported it; frontend payload was wrong) | ✅ Frontend fix | S | ✅ **DONE + verified e2e** |
-| H2 | Seeker **post-feed** endpoint (Home shows a post stream; `/api/feed` returns tutor cards) | 🕓 Decide | M | ☐ |
-| H3 | **Saved / bookmarked tutors** (Saved tab; in-memory) | 🕓 Defer | S | ☐ |
+| H2 | Seeker **post-feed** endpoint (Home shows a post stream; `/api/feed` returns tutor cards) | 🕓 Decide | M | ⏸️ **Leave as-is** (decided Jun 26) |
+| H3 | **Saved / bookmarked tutors** (Saved tab; in-memory) | 🕓 Defer | S | ✅ **DONE + FE wired** — `saved_tutors` + `/api/saved` |
 | H4 | Seeker **saved search filters** (device-local today) | ❌ Skip / optional | S | ☐ |
 
 ---
@@ -132,19 +146,44 @@ keep them.
 
 ## B. Engagement that already has backend schema (switch on)
 
-### B1 — Post likes  ·  ✅ Build (S)
+### B1 — Post likes  ·  ✅ DONE (S)
 - **Frontend:** the feed has a working like button (red pop + count) in `FeedScreen`.
-- **Backend:** `post_likes` table + `likes_count` triggers **already exist** — but there's
-  no like/unlike endpoint wired.
-- **Why build:** small (one endpoint), and the UI is already there. *(Note: the frontend
-  removed comments; backend comment schema can stay dormant.)*
+- **Backend:** `post_likes` table + `likes_count` triggers **already existed** — added the endpoint.
+- **Built (no migration needed):** `src/app/api/posts/[id]/likes/route.ts`
+  - `POST /api/posts/[id]/likes` — like (idempotent; already-liked → 200, fresh → 201)
+  - `DELETE /api/posts/[id]/likes` — unlike (idempotent)
+  - `GET /api/posts/[id]/likes` — `{ liked, likes_count }` (public; `liked=false` when signed out)
+  - Plus `GET /api/tutors/[slug]/posts` now returns **`liked_by_me`** per post (so the heart shows
+    filled/empty on load for a signed-in viewer).
+- **🔌 Needs frontend wiring:** the like button is currently bound to sample/local state — point it at
+  these endpoints (and read `liked_by_me` from the posts feed). *(Frontend removed comments; backend
+  comment schema stays dormant.)*
+- **⚠️ Fixed during verification (migration 0019):** `likes_count` wasn't incrementing — the `0001`
+  counter trigger ran as the liker and RLS blocked a non-owner from updating the post. Made the counter
+  functions `SECURITY DEFINER`. Live tests now pass (0 → like → 1 → unlike → 0).
 
-### B2 — In-app chat  ·  🕓 Defer (M)
+### B2 — In-app chat  ·  ✅ DONE + frontend wired (M)
+- **🔌 Frontend wired (Jun 27, REST polling):** shared `components/chat/ChatList` + `ChatThread`, standalone
+  routes `app/messages/index.tsx` + `app/messages/[id].tsx`, a **"Message"** button on the tutor profile
+  (`startConversation` → thread), unread badges, and mark-read on open. The thread polls every 3s, the list
+  every 5s — the app has no Supabase client, so the **Realtime publication from 0018 is currently unused**
+  (its `messages` read-receipt RLS *is* used). Upgrading to true Realtime later = add `@supabase/supabase-js`
+  + a channel subscription; no backend change needed.
+
 - **Frontend:** `ChatScreen` is a full conversation UI (sample data).
-- **Backend:** `conversations`/`messages` + endpoints **exist but are dormant**, no
-  real-time.
-- **Why defer:** it's built but switched off by choice. Turn on when you want messaging
-  to be real — your call on timing. (Until then, contact stays WhatsApp + WeChat.)
+- **Backend (was):** `conversations`/`messages` tables, RLS, AND endpoints all already existed — the only
+  missing pieces were live delivery + read state. **Now built:**
+  - `0018_chat_realtime.sql` — adds `conversations` + `messages` to the **`supabase_realtime`**
+    publication (so the app can subscribe to new messages live; RLS still scopes the stream to
+    participants) + a `messages` UPDATE policy so read receipts are allowed.
+  - `GET /api/conversations` now returns **`unread_count`** per conversation (for list badges).
+  - `PATCH /api/conversations/[id]/messages` — marks messages you *received* as read ("opened chat").
+  - (`POST /api/conversations` + `POST .../messages` already existed and are unchanged.)
+- **🔌 Needs frontend (this is the bulk of B2):** build the real `ChatScreen` against these endpoints, a
+  **Realtime subscription** to `messages` (Supabase JS `.channel(...).on('postgres_changes', …)`), a
+  conversations list using `unread_count`, a "Message" button on the tutor profile that calls
+  `POST /api/conversations`, and a call to the `PATCH …/messages` mark-read when a thread is opened.
+  (Until wired, contact stays WhatsApp + WeChat.)
 
 ---
 
@@ -197,13 +236,20 @@ The frontend's advanced filter sheet (`FilterSheet`) offers: **price, age, ratin
 years, sessions, followers, mode, districts, gender**. The backend's `GET /api/tutors`
 currently filters only by subcategory, district, format, type, and rate.
 
-### D1 — Filter by age  ·  ✅ Build (S) — you already store `age`; just expose it.
-### D2 — Filter by gender  ·  ✅ Build (S) — you already store `gender`; expose it (after A4).
+### D1 — Filter by age  ·  ✅ DONE (S) — `GET /api/tutors?min_age=&max_age=` (reads `profiles.age`).
+### D2 — Filter by gender  ·  ✅ DONE (S) — `GET /api/tutors?gender=` (reads `profiles.gender`; accepts
+`male|female|other|prefer_not_to_say|lgbt`).
 ### D3 — Rating / years / sessions / followers filters  ·  🕓 Depends on C — these can't
 work until ratings (C4), follows (C1) and sessions (C5) exist. (Years-of-experience is
 partial — derivable from per-subject data.)
-### D4 — Extend browse to the full set  ·  ✅ Build (M) — already a known backend TODO;
-add the remaining real filters (price range, district multi, mode, subject).
+### D4 — Extend browse to the full set  ·  ✅ DONE (M) — `GET /api/tutors` now also takes
+**`?language=`** (comma-separated; matches a tutor who teaches ANY, via `tutor_languages`) and
+**multi-`?district=`** (comma-separated enum codes). Price (`min_rate`/`max_rate`), mode
+(`tutoring_format`), type (`tutoring_type`) and subject (`subcategory_id`) already existed.
+- **🔌 Needs frontend wiring:** the `FilterSheet` already has these controls — map them to the new query
+  params (age range, gender, language list, multi-district) when calling `GET /api/tutors`. **Note:**
+  send district **enum codes** (e.g. `CentralWestern`), not labels — the app must map label→code first
+  (see plan.md §4.10). *(Rating/years/sessions/followers controls stay inert — they're D3, parked.)*
 
 ---
 
@@ -274,11 +320,15 @@ feature" — these are the decisions.
   profile. My lean: **(b)** for now — `/api/feed` already exists with real matching, a post-stream is a
   bigger build, and the post-feed is the deferred browse surface.
 
-### H3 — Saved / bookmarked tutors  ·  🕓 Defer (S)
+### H3 — Saved / bookmarked tutors  ·  ✅ DONE (S)
 - **Frontend:** a **Saved** tab bookmarks tutors (in-memory, session-only via a small store).
-- **Backend:** no saved/bookmarks table or endpoint.
-- **Why defer:** nice-to-have; cheap when wanted (a `saved_tutors` table + save/unsave/list endpoints).
-  Until then it's session-only on the device.
+- **Built:** `0017_saved_tutors.sql` (`saved_tutors` table, owner-only RLS) + endpoints:
+  - `GET /api/saved` — your bookmarked tutors as cards (same shape as `/api/tutors`, newest-saved first,
+    each with `id`, `slug`, `saved_at`). Tutors who later unpublish drop out of the cards but keep the row.
+  - `POST /api/saved` — body `{ tutor_id }` **or** `{ slug }`; idempotent.
+  - `DELETE /api/saved/[id]` — `[id]` is the tutor's uuid **or** slug; idempotent.
+- **🔌 Needs frontend wiring:** replace the in-memory Saved store with these endpoints (save on
+  bookmark-tap → `POST`, un-save → `DELETE`, Saved tab list → `GET`). Any signed-in role can save.
 
 ### H4 — Seeker saved search filters  ·  ❌ Skip / optional (S)
 - **Frontend:** the Search tab's advanced filters now persist across restarts via **AsyncStorage**
@@ -288,6 +338,28 @@ feature" — these are the decisions.
   cross-device sync becomes a goal.
 
 ---
+
+## 🔌 Frontend wiring (`learnsum-mvp-expo-app`) — status
+
+| Item | Frontend status | Endpoint(s) |
+|---|---|---|
+| **D1/D2/D4 filters** | ✅ **Wired** — **both** the seeker (Jun 26) **and tutor** (Jun 27) Search tabs query the backend; `FilterSheet` price/age/mode/district/gender → query params (districts mapped label→enum code; gender multi). Unsupported sliders (rating/years/sessions/followers = D3) hidden. | `GET /api/tutors?min_age=&max_age=&gender=&language=&district=&min_rate=&max_rate=&tutoring_format=` |
+| **H3 saved** | ✅ **Wired (Jun 26)** — `savedTutors` store is backend-backed (optimistic save/unsave); Saved tab lists `GET /api/saved`. Keyed by tutor slug. | `GET`/`POST /api/saved`, `DELETE /api/saved/[id]` |
+| **B1 likes** | ✅ **Wired (Jun 26)** — real post feed on the tutor profile (`TutorPostFeed`), heart wired with `liked_by_me` initial state + optimistic like/unlike. | `POST`/`DELETE /api/posts/[id]/likes`; `GET /api/tutors/[slug]/posts` (returns `liked_by_me`) |
+| **B2 chat** | ✅ **Wired (Jun 27)** — real conversation list + thread (`components/chat/*`), standalone `app/messages` routes, a **"Message"** button on tutor profiles, unread badges, mark-read on open. **Delivery is REST polling** (3s in a thread, 5s on the list) — the app stays request-only, so the 0018 **Realtime publication is unused** (read-receipt RLS from 0018 IS used). Entry points: seeker **Account → Messages**, tutor **Chat tab**, tutor-profile **Message**. | `POST /api/conversations`, `GET`/`POST/PATCH /api/conversations/[id]/messages`, `GET /api/conversations` |
+
+> **Backend change during wiring:** `GET /api/tutors?gender=` now accepts a **comma-separated list**
+> (match ANY), matching the FilterSheet's multi-select gender — consistent with `district`/`language`.
+>
+> **Real now:** both Search tabs (seeker + tutor) over `GET /api/tutors`, both Saved + the tutor-profile
+> post-feed likes, **and chat both ways** — a tutor's Search → a real tutor profile → the **Message**
+> button, so **tutor↔tutor find + message works** (as does seeker→tutor). A tutor only appears in search
+> once **published**.
+> **Still sample data (the H2 "leave Home as-is" decision):** the seeker **Home** feed + its like/save
+> buttons only. Wiring that is the same "make the feed real" work, deferred.
+>
+> **Migrations applied:** `0017_saved_tutors.sql` (H3), `0018_chat_realtime.sql` (B2), and
+> `0019_counter_triggers_security_definer.sql` (likes-counter fix found in verification) are all live.
 
 ## My overall recommendation (if you want a default path)
 

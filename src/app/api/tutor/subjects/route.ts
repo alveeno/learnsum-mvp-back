@@ -15,6 +15,7 @@ const UUID_REGEX =
 // Expo app collects these PER SUBJECT, so the edit path must persist them too —
 // otherwise editing a subject would drop its in-person/online + district info.
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
+const VALID_LEVELS = new Set(['kindergarten', 'primary', 'middle', 'high', 'university', 'adult'])
 const VALID_DISTRICTS = new Set([
   'CentralWestern', 'WanChai', 'Eastern', 'Southern',
   'YauTsimMong', 'ShamshuiPo', 'KowloonCity', 'WongTaiSin', 'KwunTong',
@@ -111,6 +112,21 @@ function parseDistricts(
   return { value: [...new Set(out)] }
 }
 
+// Per-subject teaching levels → school_level[] (which age groups for this subject).
+// Independent of format (unlike districts), so never dropped.
+function parseLevels(v: unknown): { value: string[] } | { error: string } {
+  if (v === undefined || v === null) return { value: [] }
+  if (!Array.isArray(v)) return { error: 'levels must be an array of level codes' }
+  const out: string[] = []
+  for (const l of v) {
+    if (typeof l !== 'string' || !VALID_LEVELS.has(l)) {
+      return { error: `levels has invalid code: ${String(l)} (use kindergarten, primary, middle, high, university, adult)` }
+    }
+    out.push(l)
+  }
+  return { value: [...new Set(out)] }
+}
+
 type SubjectRow = {
   subcategory_id: string
   years_experience: number | null
@@ -122,6 +138,7 @@ type SubjectRow = {
   experience: unknown
   format: string | null
   districts: string[]
+  levels: string[]
 }
 
 // Validate + shape the subjects array, deduped by subcategory_id (last wins).
@@ -163,6 +180,8 @@ function buildSubjects(input: unknown): { rows: SubjectRow[] } | { error: string
     if ('error' in fmt) return { error: fmt.error }
     const districts = parseDistricts(s.districts, fmt.value)
     if ('error' in districts) return { error: districts.error }
+    const levels = parseLevels(s.levels)
+    if ('error' in levels) return { error: levels.error }
 
     byId.set(s.subcategory_id, {
       subcategory_id: s.subcategory_id,
@@ -175,6 +194,7 @@ function buildSubjects(input: unknown): { rows: SubjectRow[] } | { error: string
       experience,
       format: fmt.value,
       districts: districts.value,
+      levels: levels.value,
     })
   }
   return { rows: [...byId.values()] }
@@ -192,7 +212,7 @@ export async function GET() {
     .from('tutor_subcategories')
     .select(
       `id, subcategory_id, years_experience, hourly_rate_min, hourly_rate_max,
-       achievements, qualifications, exam_results, experience, format, districts,
+       achievements, qualifications, exam_results, experience, format, districts, levels,
        subcategories ( id, name_en, name_zh, slug )`
     )
     .eq('tutor_id', user.id)

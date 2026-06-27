@@ -221,3 +221,54 @@ export async function POST(
     { status: 201 }
   )
 }
+
+// ---------------------------------------------------------------------------
+// PATCH /api/conversations/[id]/messages
+// Marks every message the caller RECEIVED in this conversation as read (the
+// "opened the chat" action). Only the other participant's unread messages are
+// touched — never your own. Idempotent; returns how many rows were updated.
+// RLS "messages: participant update (mark read)" (migration 0018) permits this.
+// ---------------------------------------------------------------------------
+export async function PATCH(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: conversationId } = await params
+
+  if (!UUID_REGEX.test(conversationId)) {
+    return NextResponse.json({ error: 'Invalid conversation id' }, { status: 400 })
+  }
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
+  const { conversation, response } = await resolveConversation(
+    supabase,
+    conversationId,
+    user.id
+  )
+  if (!conversation) return response!
+
+  const { data: updated, error: updateError } = await supabase
+    .from('messages')
+    .update({ is_read: true })
+    .eq('conversation_id', conversationId)
+    .neq('sender_id', user.id)
+    .eq('is_read', false)
+    .select('id')
+
+  if (updateError) {
+    console.error('[messages PATCH] Mark-read error:', updateError)
+    return NextResponse.json({ error: updateError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true, marked_read: (updated ?? []).length })
+}

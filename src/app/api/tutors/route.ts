@@ -15,6 +15,22 @@ const UUID_REGEX =
 
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
 const VALID_TYPES = new Set(['individual', 'group', 'both'])
+const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer_not_to_say', 'lgbt'])
+
+// A language token is a lowercase word (matches tutor_languages.language, which
+// is an open-ended set — see plan.md §4.2a — so we validate shape, not membership).
+const LANGUAGE_TOKEN = /^[a-z]+$/
+
+// Intersect several candidate-id sets, ignoring filters that didn't run (null).
+// Returns null when no filter ran (no restriction), else the common ids.
+function intersectIdSets(sets: Array<string[] | null>): string[] | null {
+  const active = sets.filter((s): s is string[] => s !== null)
+  if (active.length === 0) return null
+  return active.reduce((acc, s) => {
+    const set = new Set(s)
+    return acc.filter((id) => set.has(id))
+  })
+}
 
 // Deduplicate and flatten categories per tutor — same logic as /api/feed
 function shapeTutor(tutor: {
@@ -65,18 +81,76 @@ export async function GET(request: Request) {
 
   // --- Filter params ---
   const subcategoryId = searchParams.get('subcategory_id')
-  const district = searchParams.get('district')
+  // district accepts a comma-separated list (multi-district browse); a single
+  // value still works. "hk:Central & Western"-style labels are NOT accepted —
+  // callers send enum codes (the frontend maps labels → codes before querying).
+  const districts = (searchParams.get('district') ?? '')
+    .split(',')
+    .map((d) => d.trim())
+    .filter(Boolean)
   const format = searchParams.get('tutoring_format')
   const type = searchParams.get('tutoring_type')
+  // gender accepts a comma-separated list; a tutor matches if their gender is ANY.
+  const genders = (searchParams.get('gender') ?? '')
+    .split(',')
+    .map((g) => g.trim())
+    .filter(Boolean)
+  // language accepts a comma-separated list; a tutor matches if they teach ANY.
+  const languages = (searchParams.get('language') ?? '')
+    .split(',')
+    .map((l) => l.trim().toLowerCase())
+    .filter(Boolean)
   const rawMinRate = searchParams.get('min_rate')
   const rawMaxRate = searchParams.get('max_rate')
   const minRate = rawMinRate !== null ? parseInt(rawMinRate, 10) : null
   const maxRate = rawMaxRate !== null ? parseInt(rawMaxRate, 10) : null
+  const rawMinAge = searchParams.get('min_age')
+  const rawMaxAge = searchParams.get('max_age')
+  const minAge = rawMinAge !== null ? parseInt(rawMinAge, 10) : null
+  const maxAge = rawMaxAge !== null ? parseInt(rawMaxAge, 10) : null
 
   // --- Validate ---
-  if (district && !VALID_DISTRICTS.has(district)) {
+  const invalidDistrict = districts.find((d) => !VALID_DISTRICTS.has(d))
+  if (invalidDistrict) {
     return NextResponse.json(
       { error: `district must be one of: ${[...VALID_DISTRICTS].join(', ')}` },
+      { status: 400 }
+    )
+  }
+
+  const invalidGender = genders.find((g) => !VALID_GENDERS.has(g))
+  if (invalidGender) {
+    return NextResponse.json(
+      { error: `gender must be one of: ${[...VALID_GENDERS].join(', ')}` },
+      { status: 400 }
+    )
+  }
+
+  const invalidLanguage = languages.find((l) => !LANGUAGE_TOKEN.test(l))
+  if (invalidLanguage) {
+    return NextResponse.json(
+      { error: `language "${invalidLanguage}" is invalid — use lowercase names like "english", "cantonese"` },
+      { status: 400 }
+    )
+  }
+
+  if (rawMinAge !== null && (isNaN(minAge!) || minAge! < 0)) {
+    return NextResponse.json(
+      { error: 'min_age must be a non-negative integer' },
+      { status: 400 }
+    )
+  }
+
+  if (rawMaxAge !== null && (isNaN(maxAge!) || maxAge! < 0)) {
+    return NextResponse.json(
+      { error: 'max_age must be a non-negative integer' },
+      { status: 400 }
+    )
+  }
+
+  if (minAge !== null && maxAge !== null && maxAge < minAge) {
+    return NextResponse.json(
+      { error: 'max_age must be greater than or equal to min_age' },
       { status: 400 }
     )
   }
@@ -143,35 +217,55 @@ export async function GET(request: Request) {
     subcatTutorIds = [...new Set((data ?? []).map((r) => r.tutor_id))]
   }
 
-  // --- Pre-query B: district filter ---
+  // --- Pre-query B: profile filter (district / age / gender) ---
   // profiles.id === tutor_profiles.id, so profile IDs are tutor IDs directly.
-  // profiles is public-readable (USING true).
-  let districtTutorIds: string[] | null = null
+  // profiles is public-readable (USING true). All three live on profiles, so a
+  // single query covers them.
+  let profileTutorIds: string[] | null = null
 
-  if (district) {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('district', district)
+  if (districts.length > 0 || genders.length > 0 || minAge !== null || maxAge !== null) {
+    let pq = supabase.from('profiles').select('id')
+    if (districts.length > 0) pq = pq.in('district', districts)
+    if (genders.length > 0) pq = pq.in('gender', genders)
+    if (minAge !== null) pq = pq.gte('age', minAge)
+    if (maxAge !== null) pq = pq.lte('age', maxAge)
+
+    const { data, error } = await pq
 
     if (error) {
-      console.error('[tutors GET] District pre-query error:', error)
+      console.error('[tutors GET] Profile pre-query error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    districtTutorIds = (data ?? []).map((r) => r.id)
+    profileTutorIds = (data ?? []).map((r) => r.id)
+  }
+
+  // --- Pre-query C: language filter ---
+  // tutor_languages is public-readable; a tutor matches if they teach ANY of the
+  // requested languages.
+  let languageTutorIds: string[] | null = null
+
+  if (languages.length > 0) {
+    const { data, error } = await supabase
+      .from('tutor_languages')
+      .select('tutor_id')
+      .in('language', languages)
+
+    if (error) {
+      console.error('[tutors GET] Language pre-query error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    languageTutorIds = [...new Set((data ?? []).map((r) => r.tutor_id))]
   }
 
   // --- Intersect pre-queried sets ---
-  // If both filters ran, we need tutors that satisfy both.
-  let restrictedIds: string[] | null = null
-
-  if (subcatTutorIds !== null && districtTutorIds !== null) {
-    const districtSet = new Set(districtTutorIds)
-    restrictedIds = subcatTutorIds.filter((id) => districtSet.has(id))
-  } else {
-    restrictedIds = subcatTutorIds ?? districtTutorIds
-  }
+  // A tutor must satisfy every filter that ran; filters that didn't run are null.
+  const restrictedIds = intersectIdSets([
+    subcatTutorIds,
+    profileTutorIds,
+    languageTutorIds,
+  ])
 
   // Short-circuit: filters produced an empty intersection — no results possible.
   // (Avoids sending an invalid IN () clause to Postgres.)
@@ -249,8 +343,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // Cast away PostgREST's array-typed to-one embeds (profiles/categories) — the
+  // untyped client mis-infers them; shapeTutor reads them as single objects.
+  const tutorRows = (tutors ?? []) as unknown as Parameters<typeof shapeTutor>[0][]
+
   return NextResponse.json({
-    tutors: (tutors ?? []).map(shapeTutor),
+    tutors: tutorRows.map(shapeTutor),
     pagination: {
       page,
       page_size: PAGE_SIZE,

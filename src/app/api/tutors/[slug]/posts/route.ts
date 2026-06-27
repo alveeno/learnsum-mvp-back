@@ -130,8 +130,29 @@ export async function GET(
     return NextResponse.json({ error: postsError.message }, { status: 500 })
   }
 
+  // liked_by_me — public endpoint, so this is only meaningful for a signed-in
+  // caller; anonymous viewers get false on every post. One extra query fetches
+  // which of this page's posts the caller has liked.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  let likedPostIds = new Set<string>()
+  if (user && (posts?.length ?? 0) > 0) {
+    const { data: likes } = await supabase
+      .from('post_likes')
+      .select('post_id')
+      .eq('profile_id', user.id)
+      .in(
+        'post_id',
+        (posts ?? []).map((p) => p.id)
+      )
+    likedPostIds = new Set((likes ?? []).map((l) => l.post_id))
+  }
+
   const postsWithSortedMedia = (posts ?? []).map((post) => ({
     ...post,
+    liked_by_me: likedPostIds.has(post.id),
     post_media: (post.post_media ?? []).sort(
       (a: { sort_order: number }, b: { sort_order: number }) =>
         a.sort_order - b.sort_order

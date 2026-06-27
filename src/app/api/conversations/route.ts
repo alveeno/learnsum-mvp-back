@@ -61,11 +61,33 @@ export async function GET() {
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]))
 
+  // Unread counts — messages the OTHER participant sent that the caller hasn't
+  // read yet. One query across all the caller's conversations, tallied in JS.
+  // RLS "messages: participant read" already scopes this to the caller's threads.
+  const conversationIds = conversations.map((c) => c.id)
+  const { data: unread, error: unreadError } = await supabase
+    .from('messages')
+    .select('conversation_id')
+    .in('conversation_id', conversationIds)
+    .neq('sender_id', user.id)
+    .eq('is_read', false)
+
+  if (unreadError) {
+    console.error('[conversations GET] Unread count error:', unreadError)
+    return NextResponse.json({ error: unreadError.message }, { status: 500 })
+  }
+
+  const unreadCount = new Map<string, number>()
+  for (const m of unread ?? []) {
+    unreadCount.set(m.conversation_id, (unreadCount.get(m.conversation_id) ?? 0) + 1)
+  }
+
   const result = conversations.map((c) => {
     const otherId = c.participant_a === user.id ? c.participant_b : c.participant_a
     return {
       ...c,
       other_participant: profileMap.get(otherId) ?? null,
+      unread_count: unreadCount.get(c.id) ?? 0,
     }
   })
 

@@ -65,6 +65,7 @@ export async function GET(
         experience,
         format,
         districts,
+        levels,
         subcategories (
           id,
           name_en,

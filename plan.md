@@ -77,9 +77,9 @@ endpoint remain in the codebase but are **dormant** — see §4.6 / §5.)
 
 > Migrations live in `supabase/migrations/`, applied manually via the Supabase SQL editor.
 > Current files: `0001_initial_schema.sql`, `0002_rls.sql` (canonical RLS), `0003_seeker_availability_and_matching.sql`,
-> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`, `0012_oauth_role_default.sql`, `0013_delete_own_account.sql`, `0014_tutor_profile_extras.sql`, `0015_seed_taxonomy.sql`, `0016_tutor_subcategory_format_districts.sql`. (The stale `0002_rls_policies.sql`
-> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS), 0012 (OAuth-tolerant new-user trigger), 0013 (self-service account deletion), 0014 (tutor profile extras — teaching levels, per-subject experience, education history, `lgbt` gender), 0015 (reseed taxonomy to mirror the app's subject slugs — destructive), 0016 (per-subject lesson format + districts).
-> **All schema migrations are now written and applied (0004–0016).**
+> `0004_tutor_contact_columns.sql`, `0005_school_level_six_values.sql`, `0006_child_profiles.sql`, `0007_precise_availability.sql`, `0008_matching_rpc_rework.sql`, `0009_complete_onboarding.sql`, `0010_language_refinement.sql`, `0011_storage_media_bucket.sql`, `0012_oauth_role_default.sql`, `0013_delete_own_account.sql`, `0014_tutor_profile_extras.sql`, `0015_seed_taxonomy.sql`, `0016_tutor_subcategory_format_districts.sql`, `0017_saved_tutors.sql`, `0018_chat_realtime.sql`, `0019_counter_triggers_security_definer.sql`, `0020_tutor_subcategory_levels.sql`. (The stale `0002_rls_policies.sql`
+> duplicate has been removed; 0003 is superseded by 0007/0008.) **Done:** 0004 (contact columns), 0005 (6-value education enum), 0006 (per-child seeker tables), 0007 (precise availability), 0008 (reworked matching RPC), 0009 (atomic onboarding writer), 0010 (multi-language model), 0011 (media storage bucket + RLS), 0012 (OAuth-tolerant new-user trigger), 0013 (self-service account deletion), 0014 (tutor profile extras — teaching levels, per-subject experience, education history, `lgbt` gender), 0015 (reseed taxonomy to mirror the app's subject slugs — destructive), 0016 (per-subject lesson format + districts), 0017 (saved/bookmarked tutors — `saved_tutors`, owner-only), 0018 (turn on chat — `conversations`/`messages` added to the `supabase_realtime` publication + a `messages` UPDATE policy for read receipts), 0019 (fix likes/comments counter triggers — `SECURITY DEFINER` so a non-owner's like can bump `posts.likes_count` past RLS; EXECUTE revoked from anon/authenticated + a count backfill), 0020 (per-subject teaching levels — `levels school_level[]` on `tutor_subcategories`; the app moved level selection into the per-subject Strengths & Details screen; extends `complete_onboarding`).
+> **All migrations 0001–0020 are written and applied to live Supabase** (0017/0018 by the user, 0019 + 0020 via the Supabase tool).
 
 ### 4.1 Auth & Core Profiles
 
@@ -208,6 +208,7 @@ exam_results        jsonb  unused — app folds exam grades into qualifications 
 experience          jsonb  array of "relevant experience" entries  — 0014
 format              tutoring_format  per-subject lesson format       — 0016
 districts           hk_district[]    per-subject (in_person/both)    — 0016
+levels              school_level[]   per-subject teaching levels     — 0020
 ```
 > **Changed:** `achievements` / `qualifications` / `exam_results` are now **collected in onboarding**
 > (the tutor "Strengths & Details" screen already collects them). The onboarding also
@@ -317,15 +318,19 @@ inquiries (id, tutor_id, sender_profile_id, sender_name, sender_email, sender_ph
 > The table and `POST /api/tutors/[slug]/inquiries` exist but are **not built yet** —
 > no UI against them. Dormant; tracked in TODO.
 
-### 4.7 Chat & Messaging — DORMANT (not built — see TODO)
+### 4.7 Chat & Messaging — LIVE (frontend wired via REST polling)
 ```
 conversations (id, participant_a, participant_b, last_message_at, created_at,
                UNIQUE(participant_a, participant_b), CHECK (participant_a < participant_b))
 messages      (id, conversation_id, sender_id, content, is_read, created_at)
 ```
 > Canonical ordering: always insert the smaller UUID in `participant_a`. The
-> `/api/conversations*` endpoints exist but are **dormant** — chat is a TODO feature.
-> No real-time wiring yet.
+> `/api/conversations*` endpoints are **built and active** (§5). **DONE (migration 0018):**
+> `conversations` + `messages` are in the **`supabase_realtime`** publication, and a `messages`
+> UPDATE policy enables read receipts (`is_read`). **Frontend wired (Jun 27)** — conversation list +
+> thread, a "Message" button on tutor profiles, unread badges, mark-read on open. **Delivery is REST
+> polling** (the app has no Supabase client), so the Realtime publication is **ready but currently
+> unused**; upgrading to live push = add `@supabase/supabase-js` + a channel (no backend change).
 
 ### 4.8 Notifications & Push — NOT BUILT (see TODO; dormant schema)
 ```
@@ -357,6 +362,19 @@ saved_filter_preferences
 > `{ [day]: [{ start, end }] }` (§4.3) — matching `/api/availability` and the matching engine;
 > the old morning/afternoon/evening bucket shape is rejected. `null` clears the saved value.
 
+### 4.9a Saved / bookmarked tutors (auth-gated) — NEW
+```
+saved_tutors
+  id          uuid        PK
+  profile_id  uuid        FK → profiles        (the saver; any role)
+  tutor_id    uuid        FK → tutor_profiles  (the bookmarked tutor)
+  created_at  timestamptz
+  UNIQUE (profile_id, tutor_id)
+```
+> **DONE (migration 0017):** backs the seeker **Saved** tab (was in-memory). Owner-only RLS —
+> your saved list is private. Managed via `GET`/`POST /api/saved` + `DELETE /api/saved/[id]` (§5).
+> A tutor who later unpublishes drops out of the saved *cards* (RLS) but keeps the row.
+
 ### 4.10 HK Districts Enum (18 districts)
 ```
 CentralWestern | WanChai | Eastern | Southern
@@ -378,8 +396,9 @@ KwaiTsing | TsuenWan | TuenMun | YuenLong | North | TaiPo | SaiKung | ShaTin | I
 | `child_profiles` | **Owner only** (private — minors; matching reads via SECURITY DEFINER) | Owner only |
 | `tutor_subcategories`, `*_availability`, `*_category_interests` | per matching needs | Owner only |
 | `saved_filter_preferences` | Owner only | Owner only |
+| `saved_tutors` | Owner only | Owner only |
 | `inquiries` *(dormant)* | Tutor sees their own | Anyone INSERT; tutor UPDATE status |
-| `conversations`, `messages` *(dormant)* | Participants only | Participants only |
+| `conversations`, `messages` | Participants only | Participants only (incl. read-receipt UPDATE) |
 | `notifications` *(out)* | Recipient only | System / triggers only |
 
 > The matching RPC is `SECURITY DEFINER`, so it reads seeker/tutor preference rows
@@ -478,7 +497,8 @@ PUT   /api/tutor/languages [built]   full-replace; body { languages: [{language,
 GET   /api/tutor/subjects  [built]   the tutor's subjects (+ subcategory info)
 PUT   /api/tutor/subjects  [built]   full-replace; body { subjects: [{subcategory_id, years_experience,
                                   hourly_rate_min, hourly_rate_max, achievements, qualifications,
-                                  exam_results}] }; deduped by subcategory_id (last wins)
+                                  exam_results, experience, format, districts, levels}] }; deduped by
+                                  subcategory_id (last wins). format/districts (0016) + levels (0020) per subject
 ```
 > Closes the post-onboarding gap (nothing edited `tutor_subcategories` / `tutor_languages`
 > after onboarding). `PUT subjects` verifies every `subcategory_id` exists **before** the
@@ -496,14 +516,18 @@ PUT   /api/tutor/subjects  [built]   full-replace; body { subjects: [{subcategor
 
 ### Tutors / browse
 ```
-GET   /api/tutors          [built]   browse: ?subcategory_id=&district=&tutoring_format=&tutoring_type=&min_rate=&max_rate=&page=
+GET   /api/tutors          [built]   browse: ?subcategory_id=&district=&tutoring_format=&tutoring_type=&min_rate=&max_rate=
+                                  &min_age=&max_age=&gender=&language=&page=  (district, gender + language accept
+                                  comma-separated lists → match ANY; gender ∈ male|female|other|prefer_not_to_say|lgbt)
 GET   /api/tutors/[slug]   [built]   single tutor (public; includes posts)
 POST  /api/tutors          [built]   create tutor profile (is_published defaults false)  [auth, role=tutor]
 PATCH /api/tutors/[slug]   [built]   update own profile, incl. is_published + new contact fields  [auth, owner]
 ```
 > **DONE:** `instagram_handle` / `wechat_id` wired into `POST`/`PATCH` bodies and `GET /api/tutors/[slug]` (migration 0004).
-> **DONE:** `GET /api/tutors/[slug]` also returns per-subject `achievements` / `qualifications` / `exam_results` (jsonb) and the tutor's `tutor_languages` (`language` + `proficiency`).
-> **TODO:** extend `GET /api/tutors` browse filters and bodies to the remaining full set (languages, districts, etc.).
+> **DONE:** `GET /api/tutors/[slug]` also returns per-subject `achievements` / `qualifications` / `exam_results` / `experience` (jsonb), `format` / `districts` (0016), `levels` (0020), and the tutor's `tutor_languages` (`language` + `proficiency`).
+> **DONE (build round 2):** `GET /api/tutors` browse now also filters by `min_age`/`max_age` (D1),
+> `gender` (D2), `language` (tutor_languages overlap) and multi-`district` (D4). Price/format/type/subject
+> already existed.
 
 ### Home Feed
 ```
@@ -528,7 +552,22 @@ GET    /api/tutors/[slug]/posts   [built]  paginated, public
 POST   /api/tutors/[slug]/posts   [built]  create post  [auth, owner]; optional media: [{url, media_type, sort_order?}]
                                         (url must be in the media bucket; writes post_media, rollback on failure)
 DELETE /api/posts/[id]            [built]  delete own post  [auth, owner]; cascades media/likes/comments
+GET    /api/posts/[id]/likes      [built]  { liked, likes_count } (public; liked=false when signed out)
+POST   /api/posts/[id]/likes      [built]  like a post   [auth]; idempotent (already-liked → 200)
+DELETE /api/posts/[id]/likes      [built]  unlike a post [auth]; idempotent
 ```
+> **DONE (build round 2, no migration):** like/unlike endpoints (B1) on top of the existing `post_likes`
+> table + `likes_count` triggers. `GET /api/tutors/[slug]/posts` now also returns **`liked_by_me`** per
+> post for a signed-in caller. Comments stay schema-only (the app dropped comments).
+
+### Saved tutors (auth-gated)
+```
+GET    /api/saved          [built]   your bookmarked tutors as cards (same shape as /api/tutors,
+                                  newest-saved first; each has id, slug, saved_at)  [auth]
+POST   /api/saved          [built]   bookmark a tutor; body { tutor_id } OR { slug }; idempotent  [auth]
+DELETE /api/saved/[id]     [built]   un-bookmark; [id] is the tutor's uuid OR slug; idempotent  [auth]
+```
+> **DONE (migration 0017):** backs the seeker Saved tab (§4.9a). Any signed-in role may save. Owner-only RLS.
 
 ### Saved Filters
 ```
@@ -536,13 +575,22 @@ GET   /api/filters         [built]   caller's saved filter preferences  [auth]
 PUT   /api/filters         [built]   upsert (full replace)              [auth]
 ```
 
+### Chat (backend live — frontend pending; see §4.7 + B2)
+```
+GET   /api/conversations                    [built]  your threads, newest activity first; each with
+                                                  other_participant + unread_count  [auth]
+POST  /api/conversations                    [built]  start/find a thread; body { participant_id }  [auth]
+GET   /api/conversations/[id]/messages      [built]  paginated, newest-first  [auth, participant]
+POST  /api/conversations/[id]/messages      [built]  send a message; body { content }  [auth, participant]
+PATCH /api/conversations/[id]/messages      [built]  mark received messages read ("opened chat")  [auth, participant]
+```
+> Endpoints active as of build round 2. **Frontend wired (Jun 27)** via REST **polling** (3s in a thread,
+> 5s on the list) — conversation list + thread (`components/chat/*`), `app/messages` routes, a "Message"
+> button on tutor profiles, unread badges. Realtime (0018) is ready but unused until the app adds a Supabase client.
+
 ### Dormant (code exists, switched off — no UI)
 ```
 POST  /api/tutors/[slug]/inquiries          [dormant]
-GET   /api/conversations                    [dormant]
-POST  /api/conversations                    [dormant]
-GET   /api/conversations/[id]/messages      [dormant]
-POST  /api/conversations/[id]/messages      [dormant]
 (no notification / push endpoints — not built; see TODO)
 ```
 
@@ -623,15 +671,18 @@ tutors (`created_at` DESC, unfiltered). Ranking runs in the Postgres RPC
 - [x] Profile editing for all roles + account deletion
 - [x] Email + password auth **and** social login (Google/Apple/Microsoft)
 - [x] Phone / SMS OTP auth endpoints (need Twilio + Supabase provider wired — see TODO below / CLAUDE.md)
-- [x] Schema for likes/comments (no interaction UI)
+- [x] Post **likes** endpoint (like/unlike + `liked_by_me`); comments stay schema-only (app dropped them)
+- [x] **Saved / bookmarked tutors** (`saved_tutors` + `/api/saved`) — backend; frontend wiring pending
+- [x] **In-app chat** — backend (endpoints + Realtime + read receipts) **+ frontend wired** (REST polling: list + thread + "Message" button)
+- [x] Browse filters extended to age / gender / language / multi-district
 
 ### TODO (eventually)
 No launch deadline — everything below is intended for build at some point, in no fixed order.
 
 **Pending features**
-- [ ] In-app chat / messaging — `conversations`/`messages` schema + `/api/conversations*` exist but **dormant**; no real-time wiring, no UI.
+- [x] In-app chat / messaging — **backend live** (endpoints + Realtime + read receipts, 0018) **and frontend wired (Jun 27)** via REST polling (list + thread + "Message" button + unread/mark-read). Optional follow-up: swap polling for true Realtime (add `@supabase/supabase-js`).
 - [ ] Inquiry form — `inquiries` table + `POST /api/tutors/[slug]/inquiries` exist but **dormant**; no UI.
-- [ ] Post likes & comments UI — schema + counter triggers exist; build the interaction UI.
+- [~] Post likes — **endpoint live** (B1); the like button just needs **frontend** wiring. Comments dropped by the app (schema stays dormant).
 - [ ] Push notifications **and** in-app notifications — `push_tokens`/`notifications` tables exist but unused; no endpoints, no wiring.
 - [ ] Email (Resend) — transactional email + email verification (currently OFF).
 - [ ] Calendar / per-date availability scheduling — current design uses recurring weekday ranges only.
@@ -649,7 +700,7 @@ No launch deadline — everything below is intended for build at some point, in 
 - [ ] Validate `avatar_url` against the media-bucket prefix (like post media).
 - [ ] Align `saved_filter_preferences.preferred_langs` to the expanded lowercase language set (0010).
 - [ ] Make the multi-step edit writes (profile / children / tutor subjects+languages) transactional.
-- [ ] Extend `GET /api/tutors` browse filters to the full set (languages, districts, etc.).
+- [x] Extend `GET /api/tutors` browse filters to the full set — added age, gender, language, multi-district (build round 2).
 - [ ] Use **per-subject** `format`/`districts` (migration 0016) in matching/search — stored only today; the matching RPC still reads the tutor-level format + home district.
 - [x] **Reconcile subject-detail shapes:** `PUT /api/tutor/subjects` now accepts array `qualifications`/`exam_results` (the app sends `achievements: {en,zh}`, `qualifications: <structured array>`, `exam_results: null`) AND persists per-subject `format` + `districts` (it had neither). Also `PATCH /api/profiles/me` now accepts the `lgbt` gender. Done as part of wiring the Profile "Change preferences" edit save (frontend `components/tutor/tutorEditStore.ts`).
 - [ ] **`tutoring_type` (individual/group) is not collected** by the app → stored null, so the matching tie-breaker on type is always neutral. Decide: collect it in the app, or drop it from matching.
