@@ -575,7 +575,7 @@ GET   /api/filters         [built]   caller's saved filter preferences  [auth]
 PUT   /api/filters         [built]   upsert (full replace)              [auth]
 ```
 
-### Chat (backend live — frontend pending; see §4.7 + B2)
+### Chat (live — frontend wired via REST polling; see §4.7 + B2)
 ```
 GET   /api/conversations                    [built]  your threads, newest activity first; each with
                                                   other_participant + unread_count  [auth]
