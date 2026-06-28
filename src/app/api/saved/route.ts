@@ -16,15 +16,18 @@ function shapeSavedTutor(
     created_at: string
     profiles: { display_name: string | null; avatar_url: string | null; district: string | null } | null
     tutor_subcategories: Array<{
+      districts: string[] | null
       subcategories: { categories: { id: string; name_en: string; name_zh: string; slug: string } } | null
     }>
   },
   savedAt: string
 ) {
   const categoryMap = new Map<string, { id: string; name_en: string; name_zh: string; slug: string }>()
+  const subdistricts = new Set<string>()
   for (const ts of tutor.tutor_subcategories ?? []) {
     const cat = ts.subcategories?.categories
     if (cat && !categoryMap.has(cat.id)) categoryMap.set(cat.id, cat)
+    for (const d of ts.districts ?? []) subdistricts.add(d)
   }
   return {
     id: tutor.id,
@@ -36,6 +39,7 @@ function shapeSavedTutor(
     display_name: tutor.profiles?.display_name ?? null,
     avatar_url: tutor.profiles?.avatar_url ?? null,
     district: tutor.profiles?.district ?? null,
+    subdistricts: Array.from(subdistricts),
     categories: Array.from(categoryMap.values()),
     saved_at: savedAt,
   }
@@ -88,7 +92,7 @@ export async function GET() {
       tutoring_type,
       created_at,
       profiles ( display_name, avatar_url, district ),
-      tutor_subcategories ( subcategories ( categories ( id, name_en, name_zh, slug ) ) )
+      tutor_subcategories ( districts, subcategories ( categories ( id, name_en, name_zh, slug ) ) )
     `
     )
     .in('id', tutorIds)

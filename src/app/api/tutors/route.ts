@@ -3,12 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 
 const PAGE_SIZE = 20
 
-const VALID_DISTRICTS = new Set([
-  'CentralWestern', 'WanChai', 'Eastern', 'Southern',
-  'YauTsimMong', 'ShamshuiPo', 'KowloonCity', 'WongTaiSin', 'KwunTong',
-  'KwaiTsing', 'TsuenWan', 'TuenMun', 'YuenLong', 'North', 'TaiPo',
-  'SaiKung', 'ShaTin', 'Islands',
-])
+// Subdistrict slug shape, e.g. "causeway_bay". The frontend owns the location list
+// (migration 0021), so the search only sanity-checks the slug form.
+const SUBDISTRICT_SLUG_RE = /^[a-z0-9]+(?:_[a-z0-9]+)*$/
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -41,6 +38,7 @@ function shapeTutor(tutor: {
   created_at: string
   profiles: { display_name: string | null; avatar_url: string | null; district: string | null } | null
   tutor_subcategories: Array<{
+    districts: string[] | null
     subcategories: {
       categories: { id: string; name_en: string; name_zh: string; slug: string }
     } | null
@@ -50,12 +48,15 @@ function shapeTutor(tutor: {
     string,
     { id: string; name_en: string; name_zh: string; slug: string }
   >()
+  // The tutor's location for the card = the distinct subdistricts across subjects.
+  const subdistricts = new Set<string>()
 
   for (const ts of tutor.tutor_subcategories ?? []) {
     const cat = ts.subcategories?.categories
     if (cat && !categoryMap.has(cat.id)) {
       categoryMap.set(cat.id, cat)
     }
+    for (const d of ts.districts ?? []) subdistricts.add(d)
   }
 
   return {
@@ -67,6 +68,7 @@ function shapeTutor(tutor: {
     display_name: tutor.profiles?.display_name ?? null,
     avatar_url: tutor.profiles?.avatar_url ?? null,
     district: tutor.profiles?.district ?? null,
+    subdistricts: Array.from(subdistricts),
     categories: Array.from(categoryMap.values()),
   }
 }
@@ -81,10 +83,9 @@ export async function GET(request: Request) {
 
   // --- Filter params ---
   const subcategoryId = searchParams.get('subcategory_id')
-  // district accepts a comma-separated list (multi-district browse); a single
-  // value still works. "hk:Central & Western"-style labels are NOT accepted —
-  // callers send enum codes (the frontend maps labels → codes before querying).
-  const districts = (searchParams.get('district') ?? '')
+  // subdistrict accepts a comma-separated list of slugs (e.g. "causeway_bay"); a
+  // tutor matches if ANY of their per-subject districts overlaps the requested set.
+  const subdistricts = (searchParams.get('subdistrict') ?? '')
     .split(',')
     .map((d) => d.trim())
     .filter(Boolean)
@@ -110,10 +111,10 @@ export async function GET(request: Request) {
   const maxAge = rawMaxAge !== null ? parseInt(rawMaxAge, 10) : null
 
   // --- Validate ---
-  const invalidDistrict = districts.find((d) => !VALID_DISTRICTS.has(d))
-  if (invalidDistrict) {
+  const invalidSubdistrict = subdistricts.find((d) => !SUBDISTRICT_SLUG_RE.test(d))
+  if (invalidSubdistrict) {
     return NextResponse.json(
-      { error: `district must be one of: ${[...VALID_DISTRICTS].join(', ')}` },
+      { error: `subdistrict "${invalidSubdistrict}" is invalid — use slugs like "causeway_bay"` },
       { status: 400 }
     )
   }
@@ -217,15 +218,14 @@ export async function GET(request: Request) {
     subcatTutorIds = [...new Set((data ?? []).map((r) => r.tutor_id))]
   }
 
-  // --- Pre-query B: profile filter (district / age / gender) ---
+  // --- Pre-query B: profile filter (age / gender) ---
   // profiles.id === tutor_profiles.id, so profile IDs are tutor IDs directly.
-  // profiles is public-readable (USING true). All three live on profiles, so a
-  // single query covers them.
+  // profiles is public-readable (USING true). Both live on profiles, so a single
+  // query covers them. (Location moved to subdistricts — see pre-query D.)
   let profileTutorIds: string[] | null = null
 
-  if (districts.length > 0 || genders.length > 0 || minAge !== null || maxAge !== null) {
+  if (genders.length > 0 || minAge !== null || maxAge !== null) {
     let pq = supabase.from('profiles').select('id')
-    if (districts.length > 0) pq = pq.in('district', districts)
     if (genders.length > 0) pq = pq.in('gender', genders)
     if (minAge !== null) pq = pq.gte('age', minAge)
     if (maxAge !== null) pq = pq.lte('age', maxAge)
@@ -238,6 +238,25 @@ export async function GET(request: Request) {
     }
 
     profileTutorIds = (data ?? []).map((r) => r.id)
+  }
+
+  // --- Pre-query D: subdistrict filter ---
+  // tutor_subcategories.districts (text[] of subdistrict slugs) is public-readable.
+  // A tutor matches if ANY subject's districts overlap the requested subdistricts.
+  let subdistrictTutorIds: string[] | null = null
+
+  if (subdistricts.length > 0) {
+    const { data, error } = await supabase
+      .from('tutor_subcategories')
+      .select('tutor_id')
+      .overlaps('districts', subdistricts)
+
+    if (error) {
+      console.error('[tutors GET] Subdistrict pre-query error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    subdistrictTutorIds = [...new Set((data ?? []).map((r) => r.tutor_id))]
   }
 
   // --- Pre-query C: language filter ---
@@ -265,6 +284,7 @@ export async function GET(request: Request) {
     subcatTutorIds,
     profileTutorIds,
     languageTutorIds,
+    subdistrictTutorIds,
   ])
 
   // Short-circuit: filters produced an empty intersection — no results possible.
@@ -293,6 +313,7 @@ export async function GET(request: Request) {
         district
       ),
       tutor_subcategories (
+        districts,
         subcategories (
           categories (
             id,

@@ -16,12 +16,9 @@ const UUID_REGEX =
 // otherwise editing a subject would drop its in-person/online + district info.
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
 const VALID_LEVELS = new Set(['kindergarten', 'primary', 'middle', 'high', 'university', 'adult'])
-const VALID_DISTRICTS = new Set([
-  'CentralWestern', 'WanChai', 'Eastern', 'Southern',
-  'YauTsimMong', 'ShamshuiPo', 'KowloonCity', 'WongTaiSin', 'KwunTong',
-  'KwaiTsing', 'TsuenWan', 'TuenMun', 'YuenLong', 'North', 'TaiPo',
-  'SaiKung', 'ShaTin', 'Islands',
-])
+// Subdistrict slug shape, e.g. "causeway_bay". The frontend is the source of truth
+// for the location list (migration 0021), so we only sanity-check the slug form.
+const SUBDISTRICT_SLUG_RE = /^[a-z0-9]+(?:_[a-z0-9]+)*$/
 
 async function requireTutor(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -93,19 +90,19 @@ function parseFormat(v: unknown): { value: string | null } | { error: string } {
   return { value: v }
 }
 
-// Per-subject districts → hk_district[] (enum codes). Online subjects carry no
-// districts, so they are dropped to [] to mirror the onboarding write.
+// Per-subject districts → text[] of subdistrict SLUGS (e.g. "causeway_bay").
+// Online subjects carry no districts, so they are dropped to [] to mirror onboarding.
 function parseDistricts(
   v: unknown,
   format: string | null
 ): { value: string[] } | { error: string } {
   if (v === undefined || v === null) return { value: [] }
-  if (!Array.isArray(v)) return { error: 'districts must be an array of district codes' }
+  if (!Array.isArray(v)) return { error: 'districts must be an array of subdistrict slugs' }
   if (format === 'online') return { value: [] }
   const out: string[] = []
   for (const d of v) {
-    if (typeof d !== 'string' || !VALID_DISTRICTS.has(d)) {
-      return { error: `districts has invalid code: ${String(d)}` }
+    if (typeof d !== 'string' || !SUBDISTRICT_SLUG_RE.test(d)) {
+      return { error: `districts has invalid subdistrict slug: ${String(d)}` }
     }
     out.push(d)
   }

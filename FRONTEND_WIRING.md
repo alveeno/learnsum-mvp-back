@@ -139,7 +139,7 @@ This is the heart of it. **Credentials come first (all roles):**
     "education": { "university": [{ "institution": "HKU", "qualification": "BSc", "score": "First" }] },
     "current_studies": [{ "institution": "HKU", "programme": "MPhil" }],
     "subjects": [
-      { "subcategory": "mathematics", "years": "5", "pay": 350, "format": "in_person", "districts": ["hk:Central & Western"],
+      { "subcategory": "mathematics", "years": "5", "pay": 350, "format": "in_person", "districts": ["central", "causeway_bay"],
         "achievements": ["..."], "qualifications": {...}, "exam_results": {...},
         "experiences": [{ "text": "...", "kind": "duration", "dur": "2", "unit": "years", "ongoing": true }] }
     ],
@@ -180,10 +180,12 @@ This is the heart of it. **Credentials come first (all roles):**
 - **Delete own:** `DELETE /api/posts/<id>`.
 
 ### 3.7 Search / browse + viewing another tutor  ✅ **both Search tabs wired (seeker Jun 26, tutor Jun 27)**
-- **Browse / Search tab:** `GET /api/tutors?subcategory_id=&district=&tutoring_format=&tutoring_type=&min_rate=&max_rate=&min_age=&max_age=&gender=&language=`.
+- **Browse / Search tab:** `GET /api/tutors?subcategory_id=&subdistrict=&tutoring_format=&tutoring_type=&min_rate=&max_rate=&min_age=&max_age=&gender=&language=`.
   - **Both** the seeker and tutor **Search** tabs are now real: the FilterSheet's price/age/lesson-mode/
-    district/gender map to these params (district **labels → enum codes**; `gender`/`district`/`language`
-    accept comma-separated lists → match ANY). There's **no free-text search** on the backend, so the typed
+    location/gender map to these params. **Location is `subdistrict`** — a comma-separated list of
+    subdistrict slugs (e.g. `causeway_bay`); a tutor matches if ANY of their per-subject
+    `tutor_subcategories.districts` overlaps the set (migration `0021`). `gender`/`subdistrict`/`language`
+    accept comma-separated lists → match ANY. Each card now returns a `subdistricts: string[]`. There's **no free-text search** on the backend, so the typed
     query narrows the fetched cards on the device. Rating/years/sessions/followers have no backend filter —
     hidden in both sheets. A tutor only appears once **published**.
 - **Tap a tutor:** `GET /api/tutors/<slug>` → full profile + their posts + contact
