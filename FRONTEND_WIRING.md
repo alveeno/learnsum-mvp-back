@@ -204,7 +204,10 @@ This is the heart of it. **Credentials come first (all roles):**
 
 ### 3.8 Profile & account editing (Profile tab)
 - **Load current values:** `GET /api/auth/me` → `{ user, profile, detail }`.
-- **Edit common + student/parent prefs:** `PATCH /api/profiles/me`.
+- **Edit common + student/parent prefs:** `PATCH /api/profiles/me`. Now also takes the **seeker
+  profile** fields from the `SeekerAbout` screen — `bio`, `phone` (profiles, migration 0022) and, for
+  students, the `student` block's `school_level` + `education` (full school history jsonb, migration
+  0023). Onboarding sends the same via the `POST /api/onboarding` `profile` block + `student.education`.
 - **Tutor subjects:** `PUT /api/tutor/subjects` · **languages:** `PUT /api/tutor/languages`.
 - **Children (parents):** `GET/POST /api/children`, `PATCH/DELETE /api/children/<id>`.
 - **Weekly availability:** `GET/PUT /api/availability` (parents add `?child_id=`).

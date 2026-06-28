@@ -95,6 +95,7 @@ project of its own). **Depends on** = can't be built until that other gap is.
 | H2 | Seeker **post-feed** endpoint (Home shows a post stream; `/api/feed` returns tutor cards) | 🕓 Decide | M | ⏸️ **Leave as-is** (decided Jun 26) |
 | H3 | **Saved / bookmarked tutors** (Saved tab; in-memory) | 🕓 Defer | S | ✅ **DONE + FE wired** — `saved_tutors` + `/api/saved` |
 | H4 | Seeker **saved search filters** (device-local today) | ❌ Skip / optional | S | ☐ |
+| H5 | **Seeker profile fields** — name/gender/photo/**bio**/**phone** + student **education** (current level + full school history) (new `SeekerAbout` screen + Account tab) | ✅ Build | S | ✅ **DONE + verified e2e** — migrations 0022 + 0023 applied |
 
 ---
 
@@ -336,6 +337,38 @@ feature" — these are the decisions.
 - **Backend:** a `/api/filters` route already exists if you ever want filters synced across devices.
 - **Why skip:** device-local is fine for a single-device user; only wire it to the backend if
   cross-device sync becomes a goal.
+
+### H5 — Seeker profile fields (name / gender / photo / bio / phone / education)  ·  ✅ Build — implemented (S)
+- **Frontend:** new `app/onboarding/SeekerAbout.tsx` (the `TutorAbout` analogue) collects the
+  student/parent's **name, gender, photo, bio, phone** and (students only) a single **education
+  level**. It runs as the last onboarding step before `CreateAccount` **and** as the Account-tab
+  **Edit profile** screen (`mode=edit` → `PATCH /api/profiles/me`). Name + gender required; rest optional.
+- **Already worked (verified by reading the code):** `POST /api/onboarding` persists name + gender
+  (`normalizeGender`); `PATCH /api/profiles/me` already accepts the `student.school_level` block + the
+  mapped gender; and `GET /api/auth/me` already returns `gender` and (for students) `school_level`
+  under **`detail.student_profile`** — **no change needed** in `me`.
+- **Built this round (Jun 28):** the only real gaps were `bio` / `phone` (no column) and `avatar_url`
+  at onboarding (the RPC never wrote it).
+  - **Migration `0022_profile_bio_phone.sql`** — `profiles += bio text, phone text`, and
+    `CREATE OR REPLACE complete_onboarding` whose profile `UPDATE` now also writes
+    `avatar_url` / `bio` / `phone`. **Based on the current 0021 function body (NOT 0009)** so it keeps
+    the tutor levels/education/format/district + seeker district-array writes intact.
+  - **`POST /api/onboarding`** — `profilePayload` now also reads `avatar_url` / `bio` / `phone`.
+  - **`PATCH /api/profiles/me`** — now accepts + persists `bio` / `phone` (empty string clears).
+- **Follow-up (Jun 28) — student school HISTORY:** SeekerAbout now also lets STUDENTS enter a full
+  per-level school history (the same `EducationSection` UI as tutors), kept ALONGSIDE the single
+  `school_level` (which still drives matching). Stored as jsonb, mirroring `tutor_profiles.education`:
+  - **Migration `0023_seeker_education.sql`** — `student_profiles += education jsonb`, and
+    `CREATE OR REPLACE complete_onboarding` (based on the **current 0022** body) so the student
+    INSERT/UPDATE also writes `education`.
+  - **`POST /api/onboarding`** — `resolved.student` now carries `education`.
+  - **`PATCH /api/profiles/me`** — the `student` block now accepts `education` (jsonb).
+  - `GET /api/auth/me` still needs no change (`student_profile` is `select('*')`).
+- **✅ Live + verified (Jun 28):** migrations `0022` and `0023` are **both applied**. End-to-end HTTP
+  suite passing against the live DB — name/gender/avatar/bio/phone + school_level + the full school
+  history round-trip through onboarding (`POST /api/onboarding`) **and** the Account-tab edit
+  (`PATCH /api/profiles/me`), read back via `GET /api/auth/me`. (Heads-up: `next dev`'s file watcher
+  did not hot-reload the route edits — a dev-server **restart** was needed to pick them up.)
 
 ---
 

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 // PATCH /api/profiles/me
 // Role-routed editing of the caller's own data:
 //   • common `profiles` fields (any role): display_name, full_name, age,
-//     gender, avatar_url, district, preferred_language
+//     gender, avatar_url, district, preferred_language, bio, phone
 //   • role block (student / parent) for the role's preference detail table
 // Tutors edit their profile via PATCH /api/tutors/[slug] and their subjects /
 // teaching languages via the tutor subjects/languages endpoints — a `student`
@@ -80,7 +80,7 @@ export async function PATCH(request: Request) {
   // 1. Common `profiles` fields (any role)
   // -------------------------------------------------------------------------
   const {
-    display_name, full_name, age, gender, avatar_url, district, preferred_language,
+    display_name, full_name, age, gender, avatar_url, district, preferred_language, bio, phone,
   } = body as {
     display_name?: string | null
     full_name?: string | null
@@ -89,6 +89,8 @@ export async function PATCH(request: Request) {
     avatar_url?: string | null
     district?: string | null
     preferred_language?: string | null
+    bio?: string | null
+    phone?: string | null
   }
 
   const profileUpdates: Record<string, unknown> = {}
@@ -124,6 +126,10 @@ export async function PATCH(request: Request) {
     }
     profileUpdates.preferred_language = preferred_language
   }
+  // Seeker profile (SeekerAbout edit) — free-text bio + contact phone (added in
+  // migration 0022). Empty string clears the field.
+  if (bio !== undefined) profileUpdates.bio = (typeof bio === 'string' ? bio.trim() : '') || null
+  if (phone !== undefined) profileUpdates.phone = (typeof phone === 'string' ? phone.trim() : '') || null
 
   // -------------------------------------------------------------------------
   // 2. Role-specific block
@@ -190,6 +196,11 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: 'interest_subcategory_ids must all be valid UUIDs' }, { status: 400 })
       }
       newInterestIds = [...new Set(s.interest_subcategory_ids as string[])]
+    }
+    // Full per-level school history (SeekerAbout edit) — stored as jsonb.
+    if (s.education !== undefined) {
+      studentUpdates.education =
+        s.education && typeof s.education === 'object' && !Array.isArray(s.education) ? s.education : null
     }
   }
 

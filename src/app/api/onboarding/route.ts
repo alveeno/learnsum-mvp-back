@@ -192,6 +192,13 @@ export async function POST(request: Request) {
     if (age !== null) profilePayload.age = age
     const gender = normalizeGender(rawProfile.gender) // A4: lgbtq→lgbt, na→prefer_not_to_say
     if (gender) profilePayload.gender = gender
+    // Seeker "About you" (SeekerAbout) also sends a photo / bio / phone. The RPC
+    // (migration 0022) writes these onto the shared profiles row.
+    if (typeof rawProfile.avatar_url === 'string' && rawProfile.avatar_url.trim()) {
+      profilePayload.avatar_url = rawProfile.avatar_url.trim()
+    }
+    if (typeof rawProfile.bio === 'string') profilePayload.bio = rawProfile.bio.trim() || null
+    if (typeof rawProfile.phone === 'string') profilePayload.phone = rawProfile.phone.trim() || null
   }
 
   const resolved: Record<string, unknown> = { profile: profilePayload }
@@ -217,6 +224,9 @@ export async function POST(request: Request) {
       preferred_districts: mapDistricts(s.districts, skipped),
       interest_subcategory_ids: mapSubjects(s.interests, slugToId, skipped),
       availability: (s.availability as Avail) ?? {},
+      // Full per-level school history (SeekerAbout) → student_profiles.education
+      // (jsonb; persisted by the complete_onboarding RPC, migration 0023).
+      education: s.education && typeof s.education === 'object' && !Array.isArray(s.education) ? s.education : null,
     }
   } else if (role === 'parent') {
     const p = (body as { parent?: Record<string, unknown> }).parent
