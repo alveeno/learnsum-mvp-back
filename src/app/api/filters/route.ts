@@ -4,12 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 // Schema enum values — must stay in sync with 0001_initial_schema.sql
 const VALID_LANGUAGES = new Set(['english', 'cantonese', 'mandarin'])
 
-const VALID_DISTRICTS = new Set([
-  'CentralWestern', 'WanChai', 'Eastern', 'Southern',
-  'YauTsimMong', 'ShamshuiPo', 'KowloonCity', 'WongTaiSin', 'KwunTong',
-  'KwaiTsing', 'TsuenWan', 'TuenMun', 'YuenLong', 'North', 'TaiPo',
-  'SaiKung', 'ShaTin', 'Islands',
-])
+// Subdistrict slug shape, e.g. "causeway_bay" (0021). Saved filters store these.
+const SUBDISTRICT_SLUG_RE = /^[a-z0-9]+(?:_[a-z0-9]+)*$/
 
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
 const VALID_TYPES = new Set(['individual', 'group', 'both'])
@@ -152,10 +148,10 @@ export async function PUT(request: Request) {
     if (!Array.isArray(districts)) {
       return NextResponse.json({ error: 'districts must be an array' }, { status: 400 })
     }
-    const invalid = districts.find((d) => !VALID_DISTRICTS.has(d))
-    if (invalid) {
+    const invalid = districts.find((d) => typeof d !== 'string' || !SUBDISTRICT_SLUG_RE.test(d))
+    if (invalid !== undefined) {
       return NextResponse.json(
-        { error: `districts contains invalid value "${invalid}" — must be one of: ${[...VALID_DISTRICTS].join(', ')}` },
+        { error: `districts contains invalid subdistrict slug "${invalid}"` },
         { status: 400 }
       )
     }

@@ -1,7 +1,7 @@
 // Shared validation + shaping for a parent's child_profiles rows.
 // Used by POST /api/children (create) and PATCH /api/children/[id] (edit).
 // Canonical input forms mirror the rest of the edit API: interests are
-// subcategory UUIDs, districts are the 18 hk_district enum codes, languages
+// subcategory UUIDs, preferred_districts are SUBDISTRICT slugs (0021), languages
 // are lowercase tokens.
 
 export const UUID_REGEX =
@@ -9,12 +9,8 @@ export const UUID_REGEX =
 
 export const MAX_CHILDREN = 6
 
-const VALID_DISTRICTS = new Set([
-  'CentralWestern', 'WanChai', 'Eastern', 'Southern',
-  'YauTsimMong', 'ShamshuiPo', 'KowloonCity', 'WongTaiSin', 'KwunTong',
-  'KwaiTsing', 'TsuenWan', 'TuenMun', 'YuenLong', 'North', 'TaiPo',
-  'SaiKung', 'ShaTin', 'Islands',
-])
+// Subdistrict slug shape, e.g. "causeway_bay".
+const SUBDISTRICT_SLUG_RE = /^[a-z0-9]+(?:_[a-z0-9]+)*$/
 const VALID_LEVELS = new Set(['kindergarten', 'primary', 'middle', 'high', 'university', 'adult'])
 const VALID_FORMATS = new Set(['online', 'in_person', 'both'])
 const VALID_TYPES = new Set(['individual', 'group', 'both'])
@@ -85,10 +81,10 @@ export function buildChildFields(
   }
   if (src.preferred_districts !== undefined) {
     if (!Array.isArray(src.preferred_districts)) {
-      return { error: 'preferred_districts must be an array of district codes' }
+      return { error: 'preferred_districts must be an array of subdistrict slugs' }
     }
-    const bad = (src.preferred_districts as unknown[]).filter((d) => typeof d !== 'string' || !VALID_DISTRICTS.has(d))
-    if (bad.length) return { error: `preferred_districts has invalid codes: ${bad.join(', ')}` }
+    const bad = (src.preferred_districts as unknown[]).filter((d) => typeof d !== 'string' || !SUBDISTRICT_SLUG_RE.test(d))
+    if (bad.length) return { error: `preferred_districts has invalid subdistrict slugs: ${bad.join(', ')}` }
     updates.preferred_districts = [...new Set(src.preferred_districts as string[])]
   }
 

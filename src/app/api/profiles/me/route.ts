@@ -12,8 +12,9 @@ import { createClient } from '@/lib/supabase/server'
 // or `parent` block on a tutor account is rejected.
 //
 // List semantics are full-replace (send the complete desired set; [] clears).
-// Canonical input forms: interests = subcategory UUIDs, districts = the 18
-// hk_district enum codes, languages = lowercase tokens.
+// Canonical input forms: interests = subcategory UUIDs, preferred_districts =
+// SUBDISTRICT slugs (0021), languages = lowercase tokens. (The single
+// profiles.district stays the legacy hk_district enum — vestigial.)
 // ---------------------------------------------------------------------------
 
 const UUID_REGEX =
@@ -25,6 +26,8 @@ const VALID_DISTRICTS = new Set([
   'KwaiTsing', 'TsuenWan', 'TuenMun', 'YuenLong', 'North', 'TaiPo',
   'SaiKung', 'ShaTin', 'Islands',
 ])
+// Subdistrict slug shape (e.g. "causeway_bay") — preferred_districts hold these now.
+const SUBDISTRICT_SLUG_RE = /^[a-z0-9]+(?:_[a-z0-9]+)*$/
 // profiles.preferred_language is the legacy 3-value enum (vestigial but kept).
 const VALID_PREFERRED_LANGUAGE = new Set(['english', 'cantonese', 'mandarin'])
 const VALID_LEVELS = new Set(['kindergarten', 'primary', 'middle', 'high', 'university', 'adult'])
@@ -170,11 +173,11 @@ export async function PATCH(request: Request) {
     }
     if (s.preferred_districts !== undefined) {
       if (!Array.isArray(s.preferred_districts)) {
-        return NextResponse.json({ error: 'preferred_districts must be an array of district codes' }, { status: 400 })
+        return NextResponse.json({ error: 'preferred_districts must be an array of subdistrict slugs' }, { status: 400 })
       }
-      const bad = (s.preferred_districts as unknown[]).filter((d) => typeof d !== 'string' || !VALID_DISTRICTS.has(d))
+      const bad = (s.preferred_districts as unknown[]).filter((d) => typeof d !== 'string' || !SUBDISTRICT_SLUG_RE.test(d))
       if (bad.length) {
-        return NextResponse.json({ error: `preferred_districts has invalid codes: ${bad.join(', ')}` }, { status: 400 })
+        return NextResponse.json({ error: `preferred_districts has invalid subdistrict slugs: ${bad.join(', ')}` }, { status: 400 })
       }
       studentUpdates.preferred_districts = [...new Set(s.preferred_districts as string[])]
     }
