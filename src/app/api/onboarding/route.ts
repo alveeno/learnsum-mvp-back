@@ -244,6 +244,7 @@ export async function POST(request: Request) {
 
     const children = rawChildren.map((c, i) => ({
       name: typeof c.name === 'string' ? c.name.trim() : `Child ${i + 1}`,
+      age: optInt(c.age), // 0028 — child age (optional)
       ...buildSeekerPrefs(c),
       preferred_languages: mapLanguages(c.languages),
       preferred_districts: mapDistricts(c.districts, skipped),

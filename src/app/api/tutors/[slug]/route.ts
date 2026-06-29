@@ -47,6 +47,7 @@ export async function GET(
       instagram_handle,
       wechat_id,
       is_published,
+      tier,
       created_at,
       profiles (
         display_name,

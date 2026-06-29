@@ -166,6 +166,32 @@ export async function POST(
   )
   if (!conversation) return response!
 
+  // Tutor reply gating: a TUTOR may only message a SEEKER (student/parent) they
+  // have unlocked by spending a contact (free tutors can't unlock → can't reply).
+  // Seekers always reply free; tutor↔tutor is ungated.
+  const otherId =
+    conversation.participant_a === user.id ? conversation.participant_b : conversation.participant_a
+  const { data: roleRows } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .in('id', [user.id, otherId])
+  const myRole = roleRows?.find((r) => r.id === user.id)?.role
+  const otherRole = roleRows?.find((r) => r.id === otherId)?.role
+  if (myRole === 'tutor' && (otherRole === 'student' || otherRole === 'parent')) {
+    const { data: unlock } = await supabase
+      .from('tutor_contact_unlocks')
+      .select('id')
+      .eq('tutor_id', user.id)
+      .eq('seeker_id', otherId)
+      .maybeSingle()
+    if (!unlock) {
+      return NextResponse.json(
+        { error: 'Spend a contact to reply to this student.' },
+        { status: 403 }
+      )
+    }
+  }
+
   const body = await request.json().catch(() => null)
 
   if (!body) {

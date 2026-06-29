@@ -394,6 +394,52 @@ feature" — these are the decisions.
 > **Migrations applied:** `0017_saved_tutors.sql` (H3), `0018_chat_realtime.sql` (B2), and
 > `0019_counter_triggers_security_definer.sql` (likes-counter fix found in verification) are all live.
 
+## I. Subscription tiers & contact gating — built (Jun 29), migrations NOT yet applied
+
+New monetization model (tutor-side only; seekers never charged). Tutors have a
+**tier** (free / premium / deluxe). Built per the app owner's decisions:
+enforce server-side, write migrations for manual apply, wire the frontend too.
+**Cross-side "match tracking" was intentionally left frontend-only** (per-device).
+
+- **I1 — Tutor tier** · migration **`0024_tutor_tier.sql`** (`tutor_profiles.tier`
+  text + CHECK, default `free`). `GET /api/auth/me` surfaces it via `select('*')`;
+  `GET /api/tutors/[slug]` now selects `tier` (drives WhatsApp/WeChat visibility to
+  seekers — free hides them). Setter: **`PATCH /api/tutor/tier`** (the app's temp
+  switcher). No payments yet.
+- **I2 — Contact quota + unlocks** · migration **`0025_contact_unlocks.sql`**
+  (`tutor_contact_unlocks` table, owner-only RLS + the `get_seeker_for_tutor` RPC).
+  Daily allowance from tier: **free 0 / premium 1 / deluxe 3**. Routes:
+  **`GET /api/tutor/contact-quota`** (`{remaining, unlocked}`, UTC day reset) +
+  **`POST /api/tutor/contact-unlocks`** (`{seeker_id}`; idempotent; **403** out of
+  quota — the app reverts its optimistic unlock only on 403). An unlock is
+  permanent per seeker.
+- **I3 — Seeker read for tutors** · **`GET /api/seekers/[id]`** → the `Seeker`
+  shape, via the `SECURITY DEFINER` **`get_seeker_for_tutor`** RPC (needed because
+  `child_profiles` are owner-only/minors). Any signed-in tutor may read a seeker's
+  prefs/child (Req: all tiers); the **phone is gated behind an unlock**. ⚠️
+  **Privacy note:** this is the first surface that exposes a parent's child
+  (name/level/age) to a non-owner tutor — an intentional product decision (Req 3).
+  Tighten later if needed (e.g. restrict to seekers who messaged/viewed the tutor).
+- **I4 — Server-side reply gating** · `POST /api/conversations/[id]/messages` now
+  **403s a tutor** messaging a seeker they haven't unlocked (free tutors can't
+  unlock → can't reply). Seekers reply free; tutor↔tutor ungated.
+- **I5 — Profile views ("who viewed you")** · migration **`0026_profile_views.sql`**
+  + **`POST /api/tutors/[slug]/views`** (upsert) + **`GET /api/tutor/profile-views`**
+  (`{viewers}`, seekers only, most-recent first).
+- **I6 — Tutor saved people (mixed)** · migration **`0027_saved_people.sql`** +
+  **`GET/POST /api/saved/people`** + **`DELETE /api/saved/people/[id]`** (tutors AND
+  seekers; tutor id is returned as the slug). Distinct from `saved_tutors` (0017).
+- **I7 — Child age** · migration **`0028_child_age.sql`** (`child_profiles.age` +
+  `complete_onboarding` CREATE OR REPLACE — 0023 body verbatim + the one `age`
+  line). `POST /api/onboarding` now maps `child.age`; `GET /api/auth/me` + the
+  seeker RPC return it.
+
+**Status:** code + migrations written and **typecheck/lint clean**, but **migrations
+0024–0028 are NOT yet applied to live Supabase** — apply them in order (each "run
+the WHOLE file"). Frontend already calls every endpoint (mock fallbacks until the
+DB is live); the tier now persists via `PATCH /api/tutor/tier` and reads back from
+`me`. Not verified end-to-end against the live DB yet (no live HTTP suite run).
+
 ## My overall recommendation (if you want a default path)
 
 1. **Build group A now** (A1, A2, A4, A5; decide A3) — you're already collecting this
