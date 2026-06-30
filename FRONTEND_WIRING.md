@@ -208,6 +208,12 @@ This is the heart of it. **Credentials come first (all roles):**
   profile** fields from the `SeekerAbout` screen — `bio`, `phone` (profiles, migration 0022) and, for
   students, the `student` block's `school_level` + `education` (full school history jsonb, migration
   0023). Onboarding sends the same via the `POST /api/onboarding` `profile` block + `student.education`.
+- **Account information (Profile/Account tab):** the new "Account information" section also edits the
+  seeker's **`wechat_id`** via `PATCH /api/profiles/me` (`profiles.wechat_id`, **migration 0031** — a
+  shared column; tutors keep their own `tutor_profiles.wechat_id` edited via `PATCH /api/tutors/[slug]`).
+  `GET /api/auth/me` returns it for free (`select('*')`). Scope: this is the seeker's own self-view/edit
+  only — `get_seeker_for_tutor` (0029) still returns `wechat → NULL`, so it isn't exposed to tutors yet.
+  (No backend **change-password** endpoint exists — that part of the section is UI-only / not wired.)
 - **Tutor subjects:** `PUT /api/tutor/subjects` · **languages:** `PUT /api/tutor/languages`.
 - **Children (parents):** `GET/POST /api/children`, `PATCH/DELETE /api/children/<id>`.
 - **Weekly availability:** `GET/PUT /api/availability` (parents add `?child_id=`).

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 // PATCH /api/profiles/me
 // Role-routed editing of the caller's own data:
 //   • common `profiles` fields (any role): display_name, full_name, age,
-//     gender, avatar_url, district, preferred_language, bio, phone
+//     gender, avatar_url, district, preferred_language, bio, phone, wechat_id
 //   • role block (student / parent) for the role's preference detail table
 // Tutors edit their profile via PATCH /api/tutors/[slug] and their subjects /
 // teaching languages via the tutor subjects/languages endpoints — a `student`
@@ -81,7 +81,7 @@ export async function PATCH(request: Request) {
   // -------------------------------------------------------------------------
   const {
     display_name, full_name, age, gender, avatar_url, district, preferred_language, bio, phone,
-    is_discoverable, share_personal_info,
+    wechat_id, is_discoverable, share_personal_info,
   } = body as {
     display_name?: string | null
     full_name?: string | null
@@ -92,6 +92,7 @@ export async function PATCH(request: Request) {
     preferred_language?: string | null
     bio?: string | null
     phone?: string | null
+    wechat_id?: string | null
     is_discoverable?: boolean
     share_personal_info?: boolean
   }
@@ -133,6 +134,9 @@ export async function PATCH(request: Request) {
   // migration 0022). Empty string clears the field.
   if (bio !== undefined) profileUpdates.bio = (typeof bio === 'string' ? bio.trim() : '') || null
   if (phone !== undefined) profileUpdates.phone = (typeof phone === 'string' ? phone.trim() : '') || null
+  // Seeker WeChat ID (Account information edit, migration 0031) — students/parents
+  // store their own WeChat here (tutors use tutor_profiles.wechat_id instead).
+  if (wechat_id !== undefined) profileUpdates.wechat_id = (typeof wechat_id === 'string' ? wechat_id.trim() : '') || null
   // Seeker privacy toggles (migration 0029). is_discoverable → searchable/visible;
   // share_personal_info → include name/age/education/phone (off = minimal card).
   if (is_discoverable !== undefined) {
