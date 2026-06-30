@@ -81,6 +81,7 @@ export async function PATCH(request: Request) {
   // -------------------------------------------------------------------------
   const {
     display_name, full_name, age, gender, avatar_url, district, preferred_language, bio, phone,
+    is_discoverable, share_personal_info,
   } = body as {
     display_name?: string | null
     full_name?: string | null
@@ -91,6 +92,8 @@ export async function PATCH(request: Request) {
     preferred_language?: string | null
     bio?: string | null
     phone?: string | null
+    is_discoverable?: boolean
+    share_personal_info?: boolean
   }
 
   const profileUpdates: Record<string, unknown> = {}
@@ -130,6 +133,20 @@ export async function PATCH(request: Request) {
   // migration 0022). Empty string clears the field.
   if (bio !== undefined) profileUpdates.bio = (typeof bio === 'string' ? bio.trim() : '') || null
   if (phone !== undefined) profileUpdates.phone = (typeof phone === 'string' ? phone.trim() : '') || null
+  // Seeker privacy toggles (migration 0029). is_discoverable → searchable/visible;
+  // share_personal_info → include name/age/education/phone (off = minimal card).
+  if (is_discoverable !== undefined) {
+    if (typeof is_discoverable !== 'boolean') {
+      return NextResponse.json({ error: 'is_discoverable must be true or false' }, { status: 400 })
+    }
+    profileUpdates.is_discoverable = is_discoverable
+  }
+  if (share_personal_info !== undefined) {
+    if (typeof share_personal_info !== 'boolean') {
+      return NextResponse.json({ error: 'share_personal_info must be true or false' }, { status: 400 })
+    }
+    profileUpdates.share_personal_info = share_personal_info
+  }
 
   // -------------------------------------------------------------------------
   // 2. Role-specific block

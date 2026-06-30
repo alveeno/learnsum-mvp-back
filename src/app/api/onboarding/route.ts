@@ -340,5 +340,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: rpcError.message }, { status: 500 })
   }
 
+  // Seeker privacy toggles (migration 0029) — not written by the RPC; apply
+  // directly (best-effort; columns default true so an absent value stays public).
+  if (rawProfile && (typeof rawProfile.is_discoverable === 'boolean' || typeof rawProfile.share_personal_info === 'boolean')) {
+    const privacy: Record<string, boolean> = {}
+    if (typeof rawProfile.is_discoverable === 'boolean') privacy.is_discoverable = rawProfile.is_discoverable
+    if (typeof rawProfile.share_personal_info === 'boolean') privacy.share_personal_info = rawProfile.share_personal_info
+    await supabase.from('profiles').update(privacy).eq('id', user.id)
+  }
+
   return NextResponse.json({ ok: true, role, skipped }, { status: 201 })
 }

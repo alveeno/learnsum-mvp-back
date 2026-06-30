@@ -440,6 +440,25 @@ the WHOLE file"). Frontend already calls every endpoint (mock fallbacks until th
 DB is live); the tier now persists via `PATCH /api/tutor/tier` and reads back from
 `me`. Not verified end-to-end against the live DB yet (no live HTTP suite run).
 
+### I8 — Revised (Jun 30): seeker visibility, gating correction, seeker search
+
+App-owner corrections to I3/I5 + two new seeker privacy toggles. **0025 was edited
+to the unlocks table only** (its RPC moved to 0029, which the RPC now depends on).
+
+- **0029_seeker_visibility.sql** — `profiles += is_discoverable, share_personal_info`
+  (both default true). Revised **`get_seeker_for_tutor`**: a seeker is visible when
+  **public (is_discoverable) OR they've messaged the tutor**; name/age/level/child &
+  phone are withheld unless **share_personal_info** (phone also needs an unlock). New
+  **`search_seekers`** RPC backs **`GET /api/seekers`** (search public seekers; full
+  filters q/subcategory/level/district).
+- **Reply/seeker-read gate** is now message-based for private seekers (was open to all).
+- **Profile-views tiering** (`GET /api/tutor/profile-views`): **free = locked**,
+  **premium = count + anonymized list**, **deluxe = full details (public viewers only)**.
+- **Routes:** `PATCH /api/profiles/me` + `POST /api/onboarding` accept the two toggles.
+- **Apply order now:** 0024 → 0025 → 0026 → 0027 → 0028 → **0029**. Migrations still
+  **not applied / not live-tested** — the 3 RPCs (get_seeker_for_tutor, search_seekers
+  + the per-viewer deluxe path) are the parts most worth verifying on apply.
+
 ## My overall recommendation (if you want a default path)
 
 1. **Build group A now** (A1, A2, A4, A5; decide A3) — you're already collecting this

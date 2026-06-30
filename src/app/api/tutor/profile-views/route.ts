@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+const DETAIL_LIMIT = 30
+
+const LEVEL_LABEL: Record<string, string> = {
+  kindergarten: 'Kindergarten',
+  primary: 'Primary',
+  middle: 'Junior Secondary',
+  high: 'Senior Secondary',
+  university: 'University',
+  adult: 'Adult',
+}
+
 // Relative "time ago" label, e.g. "now" / "5m" / "2h" / "3d".
 function ago(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime()
@@ -23,11 +34,22 @@ type ViewRow = {
   } | null
 }
 
+type SeekerJson = {
+  name?: string | null
+  role?: string
+  level?: string | null
+  child?: { level?: string | null } | null
+  subjects?: string[] | null
+  avatar_url?: string | null
+}
+
 // ---------------------------------------------------------------------------
-// GET /api/tutor/profile-views → { viewers }
-// The parents/students who viewed the signed-in tutor's profile, most recent
-// first. Only seekers shape into the list (tutor↔tutor views are dropped). The
-// `id` is the seeker's profile id → tap opens GET /api/seekers/[id].
+// GET /api/tutor/profile-views → { tier, locked, detailed, count, viewers }
+// Tier-gated "who viewed your profile":
+//   • free    → locked (upgrade prompt); no rows.
+//   • premium → count + an anonymized list (role + time, no name/age/level).
+//   • deluxe  → full details, but only for viewers whose profile is public
+//               (private viewers fall back to anonymized).
 // ---------------------------------------------------------------------------
 export async function GET() {
   const supabase = await createClient()
@@ -37,34 +59,82 @@ export async function GET() {
   } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
+  const { data: tutor } = await supabase
+    .from('tutor_profiles')
+    .select('tier')
+    .eq('id', user.id)
+    .maybeSingle()
+  const tier = (tutor?.tier as 'free' | 'premium' | 'deluxe' | undefined) ?? 'free'
+
   const { data: views, error } = await supabase
     .from('profile_views')
     .select('viewer_id, created_at, profiles ( display_name, full_name, avatar_url, role )')
     .eq('tutor_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(50)
+    .limit(DETAIL_LIMIT)
 
   if (error) {
     console.error('[profile-views GET]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // PostgREST infers the to-one embed as an array — read it as a single object.
-  const rows = (views ?? []) as unknown as ViewRow[]
-  const viewers = rows
-    .filter((v) => v.profiles && (v.profiles.role === 'student' || v.profiles.role === 'parent'))
-    .map((v) => {
-      const p = v.profiles!
-      const role = p.role as 'student' | 'parent'
+  // Only seekers belong in "who viewed you".
+  const rows = ((views ?? []) as unknown as ViewRow[]).filter(
+    (v) => v.profiles && (v.profiles.role === 'student' || v.profiles.role === 'parent')
+  )
+  const count = rows.length
+
+  // Free: locked, no rows.
+  if (tier === 'free') {
+    return NextResponse.json({ tier, locked: true, detailed: false, count, viewers: [] })
+  }
+
+  // Premium: anonymized list (no name/age/level).
+  if (tier === 'premium') {
+    const viewers = rows.map((v) => {
+      const role = v.profiles!.role as 'student' | 'parent'
       return {
-        id: v.viewer_id,
-        name: p.display_name || p.full_name || (role === 'parent' ? 'Parent' : 'Student'),
+        id: '',
+        name: role === 'parent' ? 'A parent' : 'A student',
         role,
-        note: role === 'parent' ? 'Parent looking for a tutor' : 'Student looking for a tutor',
+        note: 'Viewed your profile',
         ago: ago(v.created_at),
-        avatar_url: p.avatar_url,
+        avatar_url: null,
       }
     })
+    return NextResponse.json({ tier, locked: false, detailed: false, count, viewers })
+  }
 
-  return NextResponse.json({ viewers })
+  // Deluxe: full details for public viewers (via the gated seeker RPC), else anonymized.
+  const viewers = await Promise.all(
+    rows.map(async (v) => {
+      const role = v.profiles!.role as 'student' | 'parent'
+      const { data: seeker } = await supabase.rpc('get_seeker_for_tutor', { p_seeker_id: v.viewer_id })
+      const s = seeker as SeekerJson | null
+      if (!s) {
+        // Private viewer — show anonymized.
+        return {
+          id: '',
+          name: role === 'parent' ? 'A parent' : 'A student',
+          role,
+          note: 'Viewed your profile',
+          ago: ago(v.created_at),
+          avatar_url: null,
+        }
+      }
+      const level = s.role === 'parent' ? s.child?.level : s.level
+      const subject = s.subjects?.[0]
+      const note = [subject, level ? LEVEL_LABEL[level] ?? level : null].filter(Boolean).join(' · ') || 'Viewed your profile'
+      return {
+        id: v.viewer_id,
+        name: s.name || (role === 'parent' ? 'Parent' : 'Student'),
+        role,
+        note,
+        ago: ago(v.created_at),
+        avatar_url: s.avatar_url ?? null,
+      }
+    })
+  )
+
+  return NextResponse.json({ tier, locked: false, detailed: true, count, viewers })
 }
