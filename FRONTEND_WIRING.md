@@ -18,7 +18,7 @@ marketplace actually work — top to bottom, and leave everything else on mock d
 it's proven:
 
 > **A tutor signs up → onboards → publishes → appears in a seeker's feed → the seeker opens
-> the profile → taps WhatsApp / Instagram / WeChat.**
+> the profile → taps WhatsApp / WeChat (or messages in-app).**
 
 **🟢 Tier 1 — the core loop (wire first, in this order):**
 1. **Auth + token helper** (§1) — replaces the mock "DEV · Logged in" state; everything depends on it.
@@ -168,11 +168,12 @@ This is the heart of it. **Credentials come first (all roles):**
 
 ### 3.5 "Complete profile" → fill details → Publish
 - **What the user does:** taps "Complete profile", adds photo, bio, WhatsApp /
-  Instagram / WeChat, then publishes.
+  WeChat, then publishes. (**Instagram was dropped** by the app.)
 - **Calls:**
   - First time the tutor profile is created (if not already): `POST /api/tutors`.
   - Save edits: `PATCH /api/tutors/<slug>` — Sends any of `{ bio, avatar_url,
-    whatsapp_number, instagram_handle, wechat_id, is_published }`.
+    whatsapp_number, wechat_id, is_published }`. (The route still accepts the
+    vestigial `instagram_handle` column, but the app no longer sends it.)
   - **Publish** = the same PATCH with `{ "is_published": true }`. Unpublish = `false`.
 - **Note:** Until `is_published` is true, **no one else can see the profile** — this
   is why a fresh tutor isn't in others' feeds yet.
