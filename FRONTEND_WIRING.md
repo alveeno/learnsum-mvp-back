@@ -111,6 +111,10 @@ or serve. Decide each before wiring the affected screen:
 - **Sends:** `{ email, password }` (or provider / phone number).
 - **Gets back:** a session **token** + `is_new_user`. Store the token (step 1).
 - **Note:** `is_new_user = false` → skip onboarding, go straight to home.
+- **Staying logged in:** the app stores the session's **`refresh_token`** too and, on a 401 (the ~1h
+  access token expired), calls **`POST /api/auth/refresh` `{ refresh_token }`** to mint a fresh session —
+  so a returning user isn't forced to log in every launch. The route does
+  `supabase.auth.refreshSession({ refresh_token })`; a rejected token returns 401 and the app logs out.
 
 ### 3.3 Onboarding flow → create account first, then save everything  ⭐ THE BIG ONE
 This is the heart of it. **Credentials come first (all roles):**
@@ -244,6 +248,7 @@ Two-step, because files are big:
 |---|---|
 | Sign up (email) | `POST /api/auth/signup` |
 | Log in | `POST /api/auth/login` |
+| Refresh session | `POST /api/auth/refresh` `{ refresh_token }` → `{ user, session }` |
 | Log out | `POST /api/auth/logout` |
 | Social login | `POST /api/auth/oauth` → `GET /api/auth/callback` |
 | Phone code | `POST /api/auth/phone` → `POST /api/auth/phone/verify` |
