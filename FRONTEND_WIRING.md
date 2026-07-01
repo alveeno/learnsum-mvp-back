@@ -249,7 +249,7 @@ Two-step, because files are big:
 | Sign up (email) | `POST /api/auth/signup` |
 | Log in | `POST /api/auth/login` |
 | Refresh session | `POST /api/auth/refresh` `{ refresh_token }` → `{ user, session }` |
-| Log out | `POST /api/auth/logout` |
+| Log out | `POST /api/auth/logout` (Bearer + optional `{ refresh_token }`) → revokes refresh token(s) |
 | Social login | `POST /api/auth/oauth` → `GET /api/auth/callback` |
 | Phone code | `POST /api/auth/phone` → `POST /api/auth/phone/verify` |
 | Who am I (prefill) | `GET /api/auth/me` |
