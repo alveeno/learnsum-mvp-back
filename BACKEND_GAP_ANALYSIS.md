@@ -58,6 +58,16 @@ project of its own). **Depends on** = can't be built until that other gap is.
 > bump — fixed in **`0019_counter_triggers_security_definer.sql`** (applied). `liked`/`liked_by_me` were
 > always fine; only the denormalized count was stuck.
 
+> ✅ **Rounds 3–5 (Jun 28 – Jul 1) — BUILT + LIVE (migrations `0019`–`0031` all applied):**
+> - **Subdistrict locations** (`0021`) — search now matches at subdistrict level.
+> - **Seeker profile fields** (`0022`/`0023`, was **H5**): `profiles.bio`/`phone` + student `education` jsonb — round-trip on onboarding **and** the Account edit.
+> - **Subscription tiers & contact gating** (`0024`/`0025`, was **Group I**): `tutor_profiles.tier` + `tutor_contact_unlocks` (daily quota, permanent unlocks) + **server-side chat reply gating**.
+> - **Seeker read / privacy / search** (`0026`–`0030`): `profile_views` ("who viewed you"), `saved_people` (tutor-side mixed saves), `child_profiles.age`, `is_discoverable`/`share_personal_info` toggles, and the `get_seeker_for_tutor` / `search_seekers` RPCs (`GET /api/seekers[/id]`); `0030` revokes them from `anon`.
+> - **"Account information" section** (`0031`): seeker `wechat_id` on `profiles` (`PATCH /api/profiles/me`); tutors keep `tutor_profiles.wechat_id`. Change-password is **UI-only** (no endpoint).
+> - **Session persistence** (routes only, no migration): `POST /api/auth/refresh` (refresh-token flow, wired into `apiFetch`'s 401 retry) + `POST /api/auth/logout` now **revokes** the refresh token(s) server-side.
+>
+> **Status correction:** Group I below still says "migrations NOT yet applied" — **stale**; `0024`–`0030` (through `0031`) are **live + verified**. `list_migrations` under-reports (most were applied manually via the SQL editor) — the live schema (`list_tables`) is authoritative.
+
 ## Summary table (my recommendation — you decide)
 
 | # | Gap | My rec | Effort | Your call |
@@ -394,7 +404,7 @@ feature" — these are the decisions.
 > **Migrations applied:** `0017_saved_tutors.sql` (H3), `0018_chat_realtime.sql` (B2), and
 > `0019_counter_triggers_security_definer.sql` (likes-counter fix found in verification) are all live.
 
-## I. Subscription tiers & contact gating — built (Jun 29), migrations NOT yet applied
+## I. Subscription tiers & contact gating — ✅ BUILT + LIVE (migrations 0024–0030 applied + verified)
 
 New monetization model (tutor-side only; seekers never charged). Tutors have a
 **tier** (free / premium / deluxe). Built per the app owner's decisions:
@@ -434,11 +444,10 @@ enforce server-side, write migrations for manual apply, wire the frontend too.
   line). `POST /api/onboarding` now maps `child.age`; `GET /api/auth/me` + the
   seeker RPC return it.
 
-**Status:** code + migrations written and **typecheck/lint clean**, but **migrations
-0024–0028 are NOT yet applied to live Supabase** — apply them in order (each "run
-the WHOLE file"). Frontend already calls every endpoint (mock fallbacks until the
-DB is live); the tier now persists via `PATCH /api/tutor/tier` and reads back from
-`me`. Not verified end-to-end against the live DB yet (no live HTTP suite run).
+**Status (updated Jul 1):** ✅ **applied + live + verified** — migrations `0024`–`0030`
+are all applied to live Supabase (0030 was added later; see I8). Every endpoint is
+wired; the tier persists via `PATCH /api/tutor/tier` and reads back from `me`/`getTutor`,
+the daily quota + permanent unlocks are real, and chat reply gating is enforced server-side.
 
 ### I8 — Revised (Jun 30): seeker visibility, gating correction, seeker search
 
@@ -455,9 +464,9 @@ to the unlocks table only** (its RPC moved to 0029, which the RPC now depends on
 - **Profile-views tiering** (`GET /api/tutor/profile-views`): **free = locked**,
   **premium = count + anonymized list**, **deluxe = full details (public viewers only)**.
 - **Routes:** `PATCH /api/profiles/me` + `POST /api/onboarding` accept the two toggles.
-- **Apply order now:** 0024 → 0025 → 0026 → 0027 → 0028 → **0029**. Migrations still
-  **not applied / not live-tested** — the 3 RPCs (get_seeker_for_tutor, search_seekers
-  + the per-viewer deluxe path) are the parts most worth verifying on apply.
+- **Apply order:** 0024 → 0025 → 0026 → 0027 → 0028 → **0029** → **0030** (revoke the
+  seeker RPCs from `anon`). ✅ **All applied + live-tested** — the 3 RPCs
+  (get_seeker_for_tutor, search_seekers + the per-viewer deluxe path) are live.
 
 ## My overall recommendation (if you want a default path)
 
